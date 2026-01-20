@@ -67,7 +67,7 @@ def get_available_jobs():
     """
     
     
-    df = pd.read_excel("jobs.xlsx")
+    df = pd.read_excel("jobs_new.xlsx")
 
     
     # Normalize column names (VERY important)
