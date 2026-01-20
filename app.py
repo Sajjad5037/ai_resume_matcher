@@ -28,7 +28,7 @@ st.set_page_config(
 
 st.success("OPENAI_API_KEY loaded successfully.")
 
-st.title("AI Resume (11:13)Matcher")
+st.title("AI Resume (11:15)Matcher")
 st.write("Upload a candidate CV to see which jobs fit best.")
 
 
@@ -65,8 +65,15 @@ def get_available_jobs():
     Reads the client's real Excel schema and builds
     a structured job context for AI evaluation.
     """
+    
+    
     df = pd.read_excel("jobs.xlsx")
 
+    df.columns = df.columns.astype(str).str.strip()
+
+    st.write("DEBUG: Columns detected by pandas")
+    st.write(list(df.columns))
+    st.stop()
     # Normalize column names (VERY important)
     df.columns = (
         df.columns
