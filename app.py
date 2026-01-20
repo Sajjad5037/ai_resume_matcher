@@ -5,7 +5,7 @@ from docx import Document
 import io
 import pandas as pd
 import json
-from openai import OpenAI
+from openai import OpenAI 
 
 
 # ----------------------------
