@@ -58,41 +58,61 @@ def get_available_jobs():
     a structured job context for AI evaluation.
     """
     df = pd.read_excel("jobs.xlsx")
-
     jobs = []
 
     for _, row in df.iterrows():
+
+        def safe(value):
+            if pd.isna(value):
+                return ""
+            return str(value).strip()
+
+        # ----------------------------
+        # Title handling (robust)
+        # ----------------------------
+        title = safe(row.get("title"))
+        if not title:
+            title = safe(row.get("position"))
+        if not title:
+            title = "Unknown Role"
+
+        # ----------------------------
+        # Build job context
+        # ----------------------------
         job_context_parts = [
-            f"Job Title: {row.get('title', '')}",
-            f"Position: {row.get('position', '')}",
-            f"Industry: {row.get('job_industry', '')}",
-            f"Job Type: {row.get('job_type', '')}",
-            f"Location: {row.get('location', '')}",
-            f"Job Description: {row.get('job_content', '')}",
-            f"Required Experience: {row.get('required_experience', '')}",
-            f"Desired Experience: {row.get('desired_experience', '')}",
-            f"Experience Needed: {row.get('experience_needed', '')}",
-            f"Education: {row.get('education', '')}",
-            f"Eligibility Details: {row.get('eligibility_details', '')}",
-            f"Foreigner Status: {row.get('foreigner_status', '')}",
-            f"Age Range: {row.get('age_lowest', '')} - {row.get('age_highest', '')}",
+            f"Job Title: {safe(row.get('title'))}",
+            f"Position: {safe(row.get('position'))}",
+            f"Industry: {safe(row.get('job_industry'))}",
+            f"Job Type: {safe(row.get('job_type'))}",
+            f"Location: {safe(row.get('location'))}",
+            f"Job Description: {safe(row.get('job_content'))}",
+            f"Required Experience: {safe(row.get('required_experience'))}",
+            f"Desired Experience: {safe(row.get('desired_experience'))}",
+            f"Experience Needed: {safe(row.get('experience_needed'))}",
+            f"Education: {safe(row.get('education'))}",
+            f"Eligibility Details: {safe(row.get('eligibility_details'))}",
+            f"Foreigner Status: {safe(row.get('foreigner_status'))}",
+            f"Age Range: {safe(row.get('age_lowest'))} - {safe(row.get('age_highest'))}",
         ]
 
         job_context = "\n".join(
             part for part in job_context_parts
-            if part and not part.endswith(": nan")
+            if part.split(": ", 1)[1]
         )
 
+        # ----------------------------
+        # Final job object
+        # ----------------------------
         jobs.append({
-            "job_id": row.get("job_url", ""),
-            "title": row.get("title", "Unknown Role"),
+            "job_id": safe(row.get("job_url")),
+            "title": title,
             "job_context": job_context,
-            # Optional metadata (not used in AI reasoning)
-            "company_name": row.get("company_name", ""),
-            "annual_income": row.get("annual_income", "")
+            "company_name": safe(row.get("company_name")),
+            "annual_income": safe(row.get("annual_income")),
         })
 
     return jobs
+
 
 
 def ai_match_job(cv_text, job):
