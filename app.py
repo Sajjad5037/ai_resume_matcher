@@ -84,14 +84,7 @@ def get_available_jobs():
             return ""
         return str(value).strip()
 
-    def get_title(row):
-        for key in ["title", "position"]:
-            if key in row.index:
-                value = row[key]
-                if not pd.isna(value) and str(value).strip():
-                    return str(value).strip()
-        return "Unknown Role"
-
+    
     for _, row in df.iterrows():
 
         # ----------------------------
@@ -116,6 +109,7 @@ def get_available_jobs():
             f"Eligibility Details: {safe(row.get('eligibility_details'))}",
             f"Foreigner Status: {safe(row.get('foreigner_status'))}",
             f"Age Range: {safe(row.get('age_lowest'))} - {safe(row.get('age_highest'))}",
+            f"Target Candidate: {safe(row.get('target_candidate'))}",
         ]
 
         job_context = "\n".join(
@@ -132,7 +126,11 @@ def get_available_jobs():
             "job_context": job_context,
             "company_name": safe(row.get("company_name")),
             "annual_income": safe(row.get("annual_income")),
+            "passrate_for_doc_screening": safe(row.get("passrate_for_doc_screening")),
+            "documents_to_job_offer_ratio": safe(row.get("documents_to_job_offer_ratio")),
+            "fee": safe(row.get("fee")),
         })
+
 
     return jobs
 
@@ -143,15 +141,52 @@ def ai_match_job(cv_text, job):
     Uses OpenAI to evaluate CV vs full job context.
     """
     prompt = f"""
-You are an experienced professional recruiter.
+You are an excellent career advisor working at a professional recruitment agency.
 
-Evaluate how well the candidate fits the job below.
+Your task is to evaluate how well the following candidate fits the job below and estimate the likelihood that this candidate would receive an offer.
 
-Return ONLY valid JSON in this format:
-{{
+Evaluate the candidate using the following three criteria. For each criterion, use one of the following ratings: ○ (meets well), △ (partially meets), × (does not meet).
+
+(1) Must-have requirements  
+- Primarily refer to: required_experience  
+- Determine whether the candidate satisfies the essential requirements for this role.
+
+(2) Preferred requirements  
+- Primarily refer to: desired_experience and target_candidate  
+- Determine whether the candidate matches the preferred or ideal profile.
+
+(3) Role responsibility alignment  
+- Primarily refer to: job_content  
+- Determine whether the candidate’s past experience is highly aligned with the actual responsibilities of the role.
+
+For EACH of the three criteria:
+- Provide the rating (○ / △ / ×)
+- Provide a short explanation for your evaluation
+
+Then, based on the overall assessment:
+- Estimate the likelihood of the candidate receiving an offer for this job (0–100%)
+- Explain the reasoning behind this estimate clearly and concisely
+
+Return ONLY valid JSON in the following format (no markdown, no extra text):
+
+{
   "score": number between 0 and 100,
-  "reason": "short, clear explanation"
-}}
+  "summary_reason": "overall explanation for the estimated offer likelihood",
+  "criteria": {
+    "must_have_requirements": {
+      "rating": "○ | △ | ×",
+      "reason": "short explanation"
+    },
+    "preferred_requirements": {
+      "rating": "○ | △ | ×",
+      "reason": "short explanation"
+    },
+    "role_alignment": {
+      "rating": "○ | △ | ×",
+      "reason": "short explanation"
+    }
+  }
+}
 
 Candidate CV:
 \"\"\"
@@ -160,9 +195,16 @@ Candidate CV:
 
 Job Information:
 Title: {job["title"]}
+Company Name: {job.get("company_name", "")}
+Job URL: {job.get("job_id", "")}
+Document Screening Pass Rate: {job.get("passrate_for_doc_screening", "")}
+Offer Rate (Documents to Offer): {job.get("documents_to_job_offer_ratio", "")}
+Fee: {job.get("fee", "")}
 
+Job Description and Requirements:
 {job["job_context"]}
 """
+
 
     try:
         response = client.chat.completions.create(
@@ -181,7 +223,9 @@ Title: {job["title"]}
             raw = raw.replace("json", "", 1).strip()
 
         result = json.loads(raw)
-        return int(result["score"]), result["reason"]
+        return int(result["score"]), result["summary_reason"]
+
+
 
     except Exception as e:
         return 0, "AI service temporarily unavailable."
