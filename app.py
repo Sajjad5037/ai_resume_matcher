@@ -28,7 +28,7 @@ st.set_page_config(
 
 st.success("OPENAI_API_KEY loaded successfully.")
 
-st.title("AI Resume (11:19)Matcher")
+st.title("AI Resume (4:22)Matcher")
 st.write("Upload a candidate CV to see which jobs fit best.")
 
 
@@ -169,24 +169,24 @@ Then, based on the overall assessment:
 
 Return ONLY valid JSON in the following format (no markdown, no extra text):
 
-{
+{{
   "score": number between 0 and 100,
   "summary_reason": "overall explanation for the estimated offer likelihood",
-  "criteria": {
-    "must_have_requirements": {
+  "criteria": {{
+    "must_have_requirements": {{
       "rating": "○ | △ | ×",
       "reason": "short explanation"
-    },
-    "preferred_requirements": {
+    }},
+    "preferred_requirements": {{
       "rating": "○ | △ | ×",
       "reason": "short explanation"
-    },
-    "role_alignment": {
+    }},
+    "role_alignment": {{
       "rating": "○ | △ | ×",
       "reason": "short explanation"
-    }
-  }
-}
+    }}
+  }}
+}}
 
 Candidate CV:
 \"\"\"
