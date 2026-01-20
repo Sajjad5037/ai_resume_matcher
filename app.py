@@ -20,6 +20,12 @@ st.set_page_config(
     page_title="AI Resume Matcher",
     layout="centered"
 )
+if not os.getenv("GEMINI_API_KEY"):
+    st.error("GEMINI_API_KEY is NOT loaded. Check Streamlit Secrets.")
+    st.stop()
+else:
+    st.success("GEMINI_API_KEY loaded successfully.")
+
 
 st.title("AI Resume Matcher")
 st.write("Upload a candidate CV to see which jobs fit best.")
