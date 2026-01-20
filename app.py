@@ -7,7 +7,7 @@
     import json
     from openai import OpenAI 
     
-    
+     
     # ----------------------------
     # OpenAI setup
     # ----------------------------
