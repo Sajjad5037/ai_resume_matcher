@@ -3,6 +3,15 @@ from pypdf import PdfReader
 from docx import Document
 import io
 import re
+import pandas as pd
+import os
+import google.generativeai as genai
+import json
+genai.configure(
+    api_key=os.getenv("GEMINI_API_KEY")
+)
+
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 # ----------------------------
 # App Config
@@ -36,38 +45,59 @@ def extract_text(uploaded_file):
 
 
 def get_available_jobs():
-    """
-    Mock data for now.
-    This will later be replaced by Google Apps Script API.
-    """
-    return [
-        {
-            "job_id": "J1",
-            "title": "Backend Developer",
-            "keywords": ["python", "api", "fastapi", "database", "postgresql"]
-        },
-        {
-            "job_id": "J2",
-            "title": "Frontend Developer",
-            "keywords": ["react", "javascript", "css", "html"]
-        },
-        {
-            "job_id": "J3",
-            "title": "Data Analyst",
-            "keywords": ["sql", "excel", "data", "analysis", "dashboard"]
-        }
-    ]
+    df = pd.read_excel("jobs.xlsx")
 
+    jobs = []
+    for _, row in df.iterrows():
+        jobs.append({
+            "job_id": row["job_id"],
+            "title": row["title"],
+            "keywords": [
+                kw.strip().lower()
+                for kw in str(row["keywords"]).split(",")
+                if kw.strip()
+            ]
+        })
 
-def simple_match_score(cv_text, job):
-    """
-    Placeholder logic.
-    This WILL be replaced by AI later.
-    """
-    text = cv_text.lower()
-    matches = sum(1 for kw in job["keywords"] if re.search(rf"\b{kw}\b", text))
-    score = int((matches / len(job["keywords"])) * 100)
-    return score
+    return jobs
+def ai_match_job(cv_text, job):
+    prompt = f"""
+You are an experienced technical recruiter.
+
+Evaluate how well the following candidate fits the job role.
+
+Return ONLY valid JSON in this format:
+{{
+  "score": number between 0 and 100,
+  "reason": "short explanation"
+}}
+
+Candidate CV:
+\"\"\"
+{cv_text[:6000]}
+\"\"\"
+
+Job Role:
+Title: {job["title"]}
+Required Skills: {", ".join(job["keywords"])}
+"""
+
+    response = model.generate_content(prompt)
+
+    try:
+        raw = response.text.strip()
+
+        # Handle ```json ... ``` wrappers
+        if raw.startswith("```"):
+            raw = raw.strip("`")
+            raw = raw.replace("json", "", 1).strip()
+
+        result = json.loads(raw)
+        return int(result["score"]), result["reason"]
+
+    except Exception as e:
+        return 0, "AI could not reliably evaluate this role."
+
 
 
 # ----------------------------
@@ -100,20 +130,28 @@ if uploaded_file:
     if st.button("Evaluate Candidate"):
         jobs = get_available_jobs()
         results = []
-
+    
         for job in jobs:
-            score = simple_match_score(cv_text, job)
+            with st.spinner(f"Evaluating {job['title']}..."):
+                score, reason = ai_match_job(cv_text, job)
+    
             results.append({
                 "Job Title": job["title"],
-                "Match Score (%)": score
+                "Match Score (%)": score,
+                "Reason": reason
             })
-
+    
+        if not results:
+            st.warning("No job evaluations available.")
+            st.stop()
+    
         results = sorted(results, key=lambda x: x["Match Score (%)"], reverse=True)
-
+    
         st.subheader("Job Match Results")
         st.table(results)
-
+    
         best = results[0]
         st.success(
             f"Best match: **{best['Job Title']}** ({best['Match Score (%)']}%)"
         )
+
