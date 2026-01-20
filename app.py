@@ -132,6 +132,8 @@ For EACH criterion:
 - Refer to specific skills, experiences, or gaps found in the CV
 - Explain how these factors would realistically affect a recruiter’s decision
 - Avoid generic statements; be explicit and evaluative
+Additionally, where applicable, include one sentence that suggests how a recruiter or employee could explain this evaluation to a candidate in a constructive and professional way (for example, framing gaps as development areas or growth opportunities rather than rejections).
+
 
 After evaluating all criteria:
 - Write a concise but insightful overall summary explaining the candidate’s strengths, weaknesses, and hiring risks
