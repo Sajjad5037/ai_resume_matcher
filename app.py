@@ -28,7 +28,7 @@ st.set_page_config(
 
 st.success("OPENAI_API_KEY loaded successfully.")
 
-st.title("AI Resume (11:06)Matcher")
+st.title("AI Resume (11:13)Matcher")
 st.write("Upload a candidate CV to see which jobs fit best.")
 
 
@@ -51,6 +51,14 @@ def extract_text(uploaded_file):
 
     return ""
 
+def get_title(row):
+    for key in ["title", "position"]:
+        if key in row.index:
+            value = row[key]
+            if not pd.isna(value) and str(value).strip():
+                return str(value).strip()
+    return "Unknown Role"
+
 
 def get_available_jobs():
     """
@@ -58,23 +66,35 @@ def get_available_jobs():
     a structured job context for AI evaluation.
     """
     df = pd.read_excel("jobs.xlsx")
+
+    # Normalize column names (VERY important)
+    df.columns = (
+        df.columns
+          .astype(str)
+          .str.strip()
+    )
+
     jobs = []
 
-    for _, row in df.iterrows():
+    def safe(value):
+        if pd.isna(value):
+            return ""
+        return str(value).strip()
 
-        def safe(value):
-            if pd.isna(value):
-                return ""
-            return str(value).strip()
+    def get_title(row):
+        for key in ["title", "position"]:
+            if key in row.index:
+                value = row[key]
+                if not pd.isna(value) and str(value).strip():
+                    return str(value).strip()
+        return "Unknown Role"
+
+    for _, row in df.iterrows():
 
         # ----------------------------
         # Title handling (robust)
         # ----------------------------
-        title = safe(row.get("title"))
-        if not title:
-            title = safe(row.get("position"))
-        if not title:
-            title = "Unknown Role"
+        title = get_title(row)
 
         # ----------------------------
         # Build job context
