@@ -22,7 +22,7 @@ client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 # App Config
 # ----------------------------
 st.set_page_config(
-    page_title="AI Resume Matcher(10:31)",
+    page_title="AI Resume Matcher",
     layout="centered"
 )
 
@@ -53,33 +53,61 @@ def extract_text(uploaded_file):
 
 
 def get_available_jobs():
-    df = pd.read_excel("jobs.xlsx")
+    """
+    Reads the client's real Excel schema and builds
+    a structured job context for AI evaluation.
+    """
+    df = pd.read_excel("job description.xlsx")
 
     jobs = []
+
     for _, row in df.iterrows():
+        job_context_parts = [
+            f"Job Title: {row.get('title', '')}",
+            f"Position: {row.get('position', '')}",
+            f"Industry: {row.get('job_industry', '')}",
+            f"Job Type: {row.get('job_type', '')}",
+            f"Location: {row.get('location', '')}",
+            f"Job Description: {row.get('job_content', '')}",
+            f"Required Experience: {row.get('required_experience', '')}",
+            f"Desired Experience: {row.get('desired_experience', '')}",
+            f"Experience Needed: {row.get('experience_needed', '')}",
+            f"Education: {row.get('education', '')}",
+            f"Eligibility Details: {row.get('eligibility_details', '')}",
+            f"Foreigner Status: {row.get('foreigner_status', '')}",
+            f"Age Range: {row.get('age_lowest', '')} - {row.get('age_highest', '')}",
+        ]
+
+        job_context = "\n".join(
+            part for part in job_context_parts
+            if part and not part.endswith(": nan")
+        )
+
         jobs.append({
-            "job_id": row["job_id"],
-            "title": row["title"],
-            "keywords": [
-                kw.strip().lower()
-                for kw in str(row["keywords"]).split(",")
-                if kw.strip()
-            ]
+            "job_id": row.get("job_url", ""),
+            "title": row.get("title", "Unknown Role"),
+            "job_context": job_context,
+            # Optional metadata (not used in AI reasoning)
+            "company_name": row.get("company_name", ""),
+            "annual_income": row.get("annual_income", "")
         })
 
     return jobs
 
 
 def ai_match_job(cv_text, job):
+    """
+    Uses OpenAI to evaluate CV vs full job context.
+    """
     prompt = f"""
-You are an experienced technical recruiter.
+You are an experienced professional recruiter.
 
-Evaluate how well the following candidate fits the job role.
+Evaluate how well the candidate fits the job below.
 
 Return ONLY valid JSON in this format:
 {{
   "score": number between 0 and 100,
-  "reason": "short explanation"
+  "reason": "short, clear explanation"
 }}
 
 Candidate CV:
@@ -87,16 +115,17 @@ Candidate CV:
 {cv_text[:6000]}
 \"\"\"
 
-Job Role:
+Job Information:
 Title: {job["title"]}
-Required Skills: {", ".join(job["keywords"])}
+
+{job["job_context"]}
 """
 
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are a professional recruiter."},
+                {"role": "system", "content": "You evaluate candidate-job fit objectively."},
                 {"role": "user", "content": prompt}
             ],
             temperature=0.2
@@ -111,7 +140,7 @@ Required Skills: {", ".join(job["keywords"])}
         result = json.loads(raw)
         return int(result["score"]), result["reason"]
 
-    except Exception:
+    except Exception as e:
         return 0, "AI service temporarily unavailable."
 
 
@@ -151,6 +180,10 @@ if uploaded_file:
                 "Match Score (%)": score,
                 "Reason": reason
             })
+
+        if not results:
+            st.warning("No jobs found to evaluate.")
+            st.stop()
 
         results = sorted(
             results,
