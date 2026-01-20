@@ -5,18 +5,18 @@ from docx import Document
 import io
 import pandas as pd
 import json
-from google import genai
+from openai import OpenAI
+
 
 # ----------------------------
-# Gemini setup (NEW SDK)
+# OpenAI setup
 # ----------------------------
-if not os.getenv("GEMINI_API_KEY"):
-    st.error("GEMINI_API_KEY is NOT loaded. Check Streamlit Secrets.")
+if not os.getenv("OPENAI_API_KEY"):
+    st.error("OPENAI_API_KEY is NOT loaded. Check Streamlit Secrets.")
     st.stop()
 
-client = genai.Client(
-    api_key=os.getenv("GEMINI_API_KEY")
-)
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
 
 # ----------------------------
 # App Config
@@ -26,10 +26,11 @@ st.set_page_config(
     layout="centered"
 )
 
-st.success("GEMINI_API_KEY loaded successfully.")
+st.success("OPENAI_API_KEY loaded successfully.")
 
 st.title("AI Resume Matcher")
 st.write("Upload a candidate CV to see which jobs fit best.")
+
 
 # ----------------------------
 # Helpers
@@ -37,15 +38,14 @@ st.write("Upload a candidate CV to see which jobs fit best.")
 def extract_text(uploaded_file):
     if uploaded_file.type == "application/pdf":
         reader = PdfReader(uploaded_file)
-        return "\n".join(
-            page.extract_text()
-            for page in reader.pages
-            if page.extract_text()
-        )
+        text = []
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text.append(page_text)
+        return "\n".join(text)
 
-    if uploaded_file.type == (
-        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-    ):
+    if uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         doc = Document(io.BytesIO(uploaded_file.read()))
         return "\n".join(p.text for p in doc.paragraphs)
 
@@ -93,12 +93,16 @@ Required Skills: {", ".join(job["keywords"])}
 """
 
     try:
-        response = client.models.generate_content(
-            model="models/gemini-1.5-flash-latest",
-            contents=prompt
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "You are a professional recruiter."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.2
         )
 
-        raw = response.text.strip()
+        raw = response.choices[0].message.content.strip()
 
         if raw.startswith("```"):
             raw = raw.strip("`")
