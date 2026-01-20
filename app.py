@@ -258,9 +258,14 @@ if uploaded_file:
         jobs = get_available_jobs()
         results = []
 
-        for job in jobs:
-            with st.spinner(f"Evaluating {job['title']}..."):
-                score, reason = ai_match_job(cv_text, job)
+        progress_text = st.empty()
+
+        total_jobs = len(jobs)
+        
+        for i, job in enumerate(jobs, start=1):
+            progress_text.info(f"Evaluating job {i} of {total_jobs}: {job['title']}")
+            score, reason = ai_match_job(cv_text, job)
+
 
             results.append({
                 "Job Title": job["title"],
