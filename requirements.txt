@@ -3,4 +3,4 @@ pypdf
 python-docx
 pandas
 openpyxl
-google-genai
+openai
