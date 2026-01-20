@@ -22,7 +22,7 @@ client = genai.Client(
 # App Config
 # ----------------------------
 st.set_page_config(
-    page_title="AI Resume Matcher",
+    page_title="AI Resume Matcher(10:31)",
     layout="centered"
 )
 
