@@ -1,10 +1,11 @@
+import os
+os.environ["GOOGLE_API_USE_REST"] = "1"
+
 import streamlit as st
 from pypdf import PdfReader
 from docx import Document
 import io
-import re
 import pandas as pd
-import os
 import google.generativeai as genai
 import json
 genai.configure(
