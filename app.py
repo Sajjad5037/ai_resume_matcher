@@ -28,7 +28,7 @@ st.set_page_config(
 
 st.success("OPENAI_API_KEY loaded successfully.")
 
-st.title("AI Resume Matcher")
+st.title("AI Resume Matcher (8:08)")
 st.write("Upload a candidate CV to see which jobs are most likely to result in an offer.")
 
 
@@ -116,28 +116,45 @@ def ai_match_job(cv_text, job):
     Uses OpenAI to evaluate CV vs job context.
     """
     prompt = f"""
-You are an excellent career advisor at a professional recruitment agency.
+You are a senior career advisor at a professional recruitment agency with deep experience in CV screening and hiring decisions.
 
-Evaluate how likely the following candidate is to receive an offer for this job.
+Evaluate how likely the following candidate is to receive a job offer for this role.
 
-Use the following criteria and rate each using ○ / △ / ×:
+You MUST analyze the candidate carefully against the job requirements and explain your reasoning clearly and concretely.
+
+For each of the following criteria, assign a rating using ○ / △ / ×:
 1. Must-have requirements (required_experience)
 2. Preferred requirements (desired_experience, target_candidate)
 3. Role responsibility alignment (job_content)
 
-Explain each rating briefly.
+For EACH criterion:
+- Clearly state why the candidate meets or does not meet the requirements
+- Refer to specific skills, experiences, or gaps found in the CV
+- Explain how these factors would realistically affect a recruiter’s decision
+- Avoid generic statements; be explicit and evaluative
 
-Then estimate the overall offer probability (0 to 100 percent).
+After evaluating all criteria:
+- Write a concise but insightful overall summary explaining the candidate’s strengths, weaknesses, and hiring risks
+- Estimate the overall probability of receiving an offer (0–100 percent), based on typical hiring standards for this role
 
 Return ONLY valid JSON in the following format:
 
 {{
   "score": number,
-  "summary_reason": "overall explanation",
+  "summary_reason": "A detailed overall explanation that synthesizes all criteria and reflects real-world hiring judgment",
   "criteria": {{
-    "must_have_requirements": {{ "rating": "○|△|×", "reason": "text" }},
-    "preferred_requirements": {{ "rating": "○|△|×", "reason": "text" }},
-    "role_alignment": {{ "rating": "○|△|×", "reason": "text" }}
+    "must_have_requirements": {{
+      "rating": "○|△|×",
+      "reason": "A clear, specific explanation referencing the CV and job requirements"
+    }},
+    "preferred_requirements": {{
+      "rating": "○|△|×",
+      "reason": "A detailed explanation of missing or matching preferred qualifications and their impact"
+    }},
+    "role_alignment": {{
+      "rating": "○|△|×",
+      "reason": "An explanation of how well the candidate’s background aligns with daily responsibilities of the role"
+    }}
   }}
 }}
 
