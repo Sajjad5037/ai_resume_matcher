@@ -1,19 +1,22 @@
 import os
-os.environ["GOOGLE_API_USE_REST"] = "1"
-
 import streamlit as st
 from pypdf import PdfReader
 from docx import Document
 import io
 import pandas as pd
-import google.generativeai as genai
 import json
-genai.configure(
+from google import genai
+
+# ----------------------------
+# Gemini setup (NEW SDK)
+# ----------------------------
+if not os.getenv("GEMINI_API_KEY"):
+    st.error("GEMINI_API_KEY is NOT loaded. Check Streamlit Secrets.")
+    st.stop()
+
+client = genai.Client(
     api_key=os.getenv("GEMINI_API_KEY")
 )
-
-model = genai.GenerativeModel("models/gemini-1.5-flash-latest")
-
 
 # ----------------------------
 # App Config
@@ -22,14 +25,10 @@ st.set_page_config(
     page_title="AI Resume Matcher",
     layout="centered"
 )
-if not os.getenv("GEMINI_API_KEY"):
-    st.error("GEMINI_API_KEY is NOT loaded. Check Streamlit Secrets.")
-    st.stop()
-else:
-    st.success("GEMINI_API_KEY loaded successfully.")
 
+st.success("GEMINI_API_KEY loaded successfully.")
 
-st.title("AI Resume Matcher(10:24)")
+st.title("AI Resume Matcher")
 st.write("Upload a candidate CV to see which jobs fit best.")
 
 # ----------------------------
@@ -38,14 +37,15 @@ st.write("Upload a candidate CV to see which jobs fit best.")
 def extract_text(uploaded_file):
     if uploaded_file.type == "application/pdf":
         reader = PdfReader(uploaded_file)
-        text = []
-        for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text.append(page_text)
-        return "\n".join(text)
+        return "\n".join(
+            page.extract_text()
+            for page in reader.pages
+            if page.extract_text()
+        )
 
-    if uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+    if uploaded_file.type == (
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ):
         doc = Document(io.BytesIO(uploaded_file.read()))
         return "\n".join(p.text for p in doc.paragraphs)
 
@@ -68,6 +68,8 @@ def get_available_jobs():
         })
 
     return jobs
+
+
 def ai_match_job(cv_text, job):
     prompt = f"""
 You are an experienced technical recruiter.
@@ -90,12 +92,14 @@ Title: {job["title"]}
 Required Skills: {", ".join(job["keywords"])}
 """
 
-    response = model.generate_content(prompt)
-
     try:
+        response = client.models.generate_content(
+            model="gemini-1.5-flash",
+            contents=prompt
+        )
+
         raw = response.text.strip()
 
-        # Handle ```json ... ``` wrappers
         if raw.startswith("```"):
             raw = raw.strip("`")
             raw = raw.replace("json", "", 1).strip()
@@ -103,9 +107,8 @@ Required Skills: {", ".join(job["keywords"])}
         result = json.loads(raw)
         return int(result["score"]), result["reason"]
 
-    except Exception as e:
-        return 0, "AI could not reliably evaluate this role."
-
+    except Exception:
+        return 0, "AI service temporarily unavailable."
 
 
 # ----------------------------
@@ -127,39 +130,34 @@ if uploaded_file:
         st.stop()
 
     st.subheader("Extracted CV Text")
-    st.text_area(
-        label="",
-        value=cv_text,
-        height=250
-    )
+    st.text_area("", cv_text, height=250)
 
     st.divider()
 
     if st.button("Evaluate Candidate"):
         jobs = get_available_jobs()
         results = []
-    
+
         for job in jobs:
             with st.spinner(f"Evaluating {job['title']}..."):
                 score, reason = ai_match_job(cv_text, job)
-    
+
             results.append({
                 "Job Title": job["title"],
                 "Match Score (%)": score,
                 "Reason": reason
             })
-    
-        if not results:
-            st.warning("No job evaluations available.")
-            st.stop()
-    
-        results = sorted(results, key=lambda x: x["Match Score (%)"], reverse=True)
-    
+
+        results = sorted(
+            results,
+            key=lambda x: x["Match Score (%)"],
+            reverse=True
+        )
+
         st.subheader("Job Match Results")
         st.table(results)
-    
+
         best = results[0]
         st.success(
             f"Best match: **{best['Job Title']}** ({best['Match Score (%)']}%)"
         )
-
