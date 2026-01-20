@@ -5,9 +5,9 @@ from docx import Document
 import io
 import pandas as pd
 import json
-from openai import OpenAI 
+from openai import OpenAI
 
- 
+
 # ----------------------------
 # OpenAI setup
 # ----------------------------
@@ -28,8 +28,8 @@ st.set_page_config(
 
 st.success("OPENAI_API_KEY loaded successfully.")
 
-st.title("AI Resume (4:55)Matcher")
-st.write("Upload a candidate CV to see which jobs fit best.")
+st.title("AI Resume Matcher")
+st.write("Upload a candidate CV to see which jobs are most likely to result in an offer.")
 
 
 # ----------------------------
@@ -51,6 +51,7 @@ def extract_text(uploaded_file):
 
     return ""
 
+
 def get_title(row):
     for key in ["title", "position"]:
         if key in row.index:
@@ -62,20 +63,12 @@ def get_title(row):
 
 def get_available_jobs():
     """
-    Reads the client's real Excel schema and builds
+    Reads the client's Excel schema and builds
     a structured job context for AI evaluation.
     """
-    
-    
     df = pd.read_excel("jobs_new.xlsx")
 
-    
-    # Normalize column names (VERY important)
-    df.columns = (
-        df.columns
-          .astype(str)
-          .str.strip()
-    )
+    df.columns = df.columns.astype(str).str.strip()
 
     jobs = []
 
@@ -84,17 +77,9 @@ def get_available_jobs():
             return ""
         return str(value).strip()
 
-    
     for _, row in df.iterrows():
-
-        # ----------------------------
-        # Title handling (robust)
-        # ----------------------------
         title = get_title(row)
 
-        # ----------------------------
-        # Build job context
-        # ----------------------------
         job_context_parts = [
             f"Job Title: {safe(row.get('title'))}",
             f"Position: {safe(row.get('position'))}",
@@ -104,87 +89,55 @@ def get_available_jobs():
             f"Job Description: {safe(row.get('job_content'))}",
             f"Required Experience: {safe(row.get('required_experience'))}",
             f"Desired Experience: {safe(row.get('desired_experience'))}",
-            f"Experience Needed: {safe(row.get('experience_needed'))}",
+            f"Target Candidate: {safe(row.get('target_candidate'))}",
             f"Education: {safe(row.get('education'))}",
             f"Eligibility Details: {safe(row.get('eligibility_details'))}",
-            f"Foreigner Status: {safe(row.get('foreigner_status'))}",
-            f"Age Range: {safe(row.get('age_lowest'))} - {safe(row.get('age_highest'))}",
-            f"Target Candidate: {safe(row.get('target_candidate'))}",
         ]
 
         job_context = "\n".join(
-            part for part in job_context_parts
-            if part.split(": ", 1)[1]
+            part for part in job_context_parts if part.split(": ", 1)[1]
         )
 
-        # ----------------------------
-        # Final job object
-        # ----------------------------
         jobs.append({
             "job_id": safe(row.get("job_url")),
             "title": title,
             "job_context": job_context,
             "company_name": safe(row.get("company_name")),
-            "annual_income": safe(row.get("annual_income")),
             "passrate_for_doc_screening": safe(row.get("passrate_for_doc_screening")),
             "documents_to_job_offer_ratio": safe(row.get("documents_to_job_offer_ratio")),
             "fee": safe(row.get("fee")),
         })
 
-
     return jobs
-
 
 
 def ai_match_job(cv_text, job):
     """
-    Uses OpenAI to evaluate CV vs full job context.
+    Uses OpenAI to evaluate CV vs job context.
     """
     prompt = f"""
-You are an excellent career advisor working at a professional recruitment agency.
+You are an excellent career advisor at a professional recruitment agency.
 
-Your task is to evaluate how well the following candidate fits the job below and estimate the likelihood that this candidate would receive an offer.
+Evaluate how likely the following candidate is to receive an offer for this job.
 
-Evaluate the candidate using the following three criteria. For each criterion, use one of the following ratings: ○ (meets well), △ (partially meets), × (does not meet).
+Use the following criteria and rate each using ○ / △ / ×:
+1. Must-have requirements (required_experience)
+2. Preferred requirements (desired_experience, target_candidate)
+3. Role responsibility alignment (job_content)
 
-(1) Must-have requirements  
-- Primarily refer to: required_experience  
-- Determine whether the candidate satisfies the essential requirements for this role.
+Explain each rating briefly.
 
-(2) Preferred requirements  
-- Primarily refer to: desired_experience and target_candidate  
-- Determine whether the candidate matches the preferred or ideal profile.
+Then estimate the overall offer probability (0 to 100 percent).
 
-(3) Role responsibility alignment  
-- Primarily refer to: job_content  
-- Determine whether the candidate’s past experience is highly aligned with the actual responsibilities of the role.
-
-For EACH of the three criteria:
-- Provide the rating (○ / △ / ×)
-- Provide a short explanation for your evaluation
-
-Then, based on the overall assessment:
-- Estimate the likelihood of the candidate receiving an offer for this job (0–100%)
-- Explain the reasoning behind this estimate clearly and concisely
-
-Return ONLY valid JSON in the following format (no markdown, no extra text):
+Return ONLY valid JSON in the following format:
 
 {{
-  "score": number between 0 and 100,
-  "summary_reason": "overall explanation for the estimated offer likelihood",
+  "score": number,
+  "summary_reason": "overall explanation",
   "criteria": {{
-    "must_have_requirements": {{
-      "rating": "○ | △ | ×",
-      "reason": "short explanation"
-    }},
-    "preferred_requirements": {{
-      "rating": "○ | △ | ×",
-      "reason": "short explanation"
-    }},
-    "role_alignment": {{
-      "rating": "○ | △ | ×",
-      "reason": "short explanation"
-    }}
+    "must_have_requirements": {{ "rating": "○|△|×", "reason": "text" }},
+    "preferred_requirements": {{ "rating": "○|△|×", "reason": "text" }},
+    "role_alignment": {{ "rating": "○|△|×", "reason": "text" }}
   }}
 }}
 
@@ -195,16 +148,15 @@ Candidate CV:
 
 Job Information:
 Title: {job["title"]}
-Company Name: {job.get("company_name", "")}
-Job URL: {job.get("job_id", "")}
-Document Screening Pass Rate: {job.get("passrate_for_doc_screening", "")}
-Offer Rate (Documents to Offer): {job.get("documents_to_job_offer_ratio", "")}
-Fee: {job.get("fee", "")}
+Company: {job["company_name"]}
+Job URL: {job["job_id"]}
+Document Pass Rate: {job["passrate_for_doc_screening"]}
+Offer Rate: {job["documents_to_job_offer_ratio"]}
+Fee: {job["fee"]}
 
-Job Description and Requirements:
+Job Description:
 {job["job_context"]}
 """
-
 
     try:
         response = client.chat.completions.create(
@@ -219,16 +171,11 @@ Job Description and Requirements:
         raw = response.choices[0].message.content.strip()
 
         if raw.startswith("```"):
-            raw = raw.strip("`")
-            raw = raw.replace("json", "", 1).strip()
+            raw = raw.strip("`").replace("json", "", 1).strip()
 
-        result = json.loads(raw)
-        return result
+        return json.loads(raw)
 
-
-
-
-    except Exception as e:
+    except Exception:
         return {
             "score": 0,
             "summary_reason": "AI service temporarily unavailable.",
@@ -238,7 +185,6 @@ Job Description and Requirements:
                 "role_alignment": {"rating": "×", "reason": "Evaluation failed"},
             }
         }
-
 
 
 # ----------------------------
@@ -262,74 +208,57 @@ if uploaded_file:
     st.subheader("Extracted CV Text")
     st.text_area("", cv_text, height=250)
 
-    st.divider()
-
     if st.button("Evaluate Candidate"):
         jobs = get_available_jobs()
         results = []
 
-        progress_text = st.empty()
-
+        progress = st.empty()
         total_jobs = len(jobs)
-        
-        for i, job in enumerate(jobs, start=1):
-            progress_text.info(f"Evaluating job {i} of {total_jobs}: {job['title']}")
-            result = ai_match_job(cv_text, job)
-            score = result["score"]
-            reason = result["summary_reason"]
-            criteria = result["criteria"]
-   
 
-            
+        for i, job in enumerate(jobs, start=1):
+            progress.info(f"Evaluating job {i} of {total_jobs}: {job['title']}")
+            result = ai_match_job(cv_text, job)
+
             results.append({
-                "Job Title": job["title"],
-                "Match Score (%)": score,
-                "Reason": reason,
-                "Criteria": criteria
+                "job": job,
+                "score": result["score"],
+                "reason": result["summary_reason"],
+                "criteria": result["criteria"]
             })
 
-        if not results:
-            st.warning("No jobs found to evaluate.")
-            st.stop()
-
-        results = sorted(
-            results,
-            key=lambda x: x["Match Score (%)"],
-            reverse=True
-        )
+        results.sort(key=lambda x: x["score"], reverse=True)
 
         st.subheader("Job Match Results")
 
         for r in results:
-            st.markdown(f"### {r['Job Title']}")
-            st.write(f"**Match Score:** {r['Match Score (%)']}%")
-            st.write(r["Reason"])
-        
-            criteria = r["Criteria"]
-        
-            with st.expander("Evaluation details"):
-                st.write(
-                    "Must-have requirements:",
-                    criteria["must_have_requirements"]["rating"]
-                )
-                st.write(criteria["must_have_requirements"]["reason"])
-        
-                st.write(
-                    "Preferred requirements:",
-                    criteria["preferred_requirements"]["rating"]
-                )
-                st.write(criteria["preferred_requirements"]["reason"])
-        
-                st.write(
-                    "Role alignment:",
-                    criteria["role_alignment"]["rating"]
-                )
-                st.write(criteria["role_alignment"]["reason"])
-        
-            st.divider()
+            job = r["job"]
+            st.markdown(f"### {job['title']}")
+            st.write(f"**Estimated Offer Probability:** {r['score']}%")
 
+            st.caption(
+                f"""
+                **Company:** {job['company_name']}  
+                **Document pass rate:** {job['passrate_for_doc_screening']}  
+                **Offer rate:** {job['documents_to_job_offer_ratio']}  
+                **Fee:** {job['fee']}  
+                **Job link:** {job['job_id']}
+                """
+            )
+
+            st.write(r["reason"])
+
+            with st.expander("Evaluation details"):
+                for key, label in [
+                    ("must_have_requirements", "Must-have requirements"),
+                    ("preferred_requirements", "Preferred requirements"),
+                    ("role_alignment", "Role alignment")
+                ]:
+                    st.write(label, r["criteria"][key]["rating"])
+                    st.write(r["criteria"][key]["reason"])
+
+            st.divider()
 
         best = results[0]
         st.success(
-            f"Best match: **{best['Job Title']}** ({best['Match Score (%)']}%)"
+            f"Best match: **{best['job']['title']}** ({best['score']}%)"
         )
