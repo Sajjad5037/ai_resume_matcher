@@ -57,7 +57,7 @@ def get_available_jobs():
     Reads the client's real Excel schema and builds
     a structured job context for AI evaluation.
     """
-    df = pd.read_excel("job description.xlsx")
+    df = pd.read_excel("jobs.xlsx")
 
     jobs = []
 
