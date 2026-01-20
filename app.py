@@ -28,7 +28,7 @@ st.set_page_config(
 
 st.success("OPENAI_API_KEY loaded successfully.")
 
-st.title("AI Resume (4:32)Matcher")
+st.title("AI Resume (4:43)Matcher")
 st.write("Upload a candidate CV to see which jobs fit best.")
 
 
