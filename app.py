@@ -169,86 +169,50 @@ def get_available_jobs():
 
 
 def ai_match_job(cv_text, job, model_name):
-
     """
     Uses Gemini to evaluate CV vs job context.
-    Pure logic function – NO Streamlit calls inside.
+    Optimized for Gemini 3 Flash (short, strict JSON).
     """
 
     prompt = f"""
-あなたは、採用・書類選考の実務経験が豊富なプロフェッショナルな人材アドバイザーです。
+あなたは採用担当者です。
+以下の履歴書（CV）の**記載内容のみ**を根拠として、
+この求人に対する適合度を評価してください。
 
-以下の候補者が、この職種において内定を獲得できる可能性について、
-**提供された履歴書（CV）の記載内容のみ**を根拠として、客観的かつ丁寧に評価してください。
+【必須ルール】
+- 出力は必ず有効なJSONのみ
+- JSON以外の文章は禁止
+- すべて日本語
+- 各文章は必ず1文のみ
+- 長い説明は禁止
 
-【言語要件（必須）】
-- 評価内容はすべて日本語で記述してください。
-- 英語は一切使用しないでください。
-- 採用担当者が社内で共有する評価コメントを想定した、自然で客観的なビジネス日本語を使用してください。
-- JSONのキー名は変更せず、値（score以外の文章）はすべて日本語で記述してください。
-
-【重要な評価ルール（必須）】
-- すべての評価は、CVに明示的に記載されている事実・経験のみを根拠としてください。
-- CVに記載されているスキル・業界経験・資格について、「不足している」「経験がない」と断定してはいけません。
-- 交渉、説得、関係者調整、顧客対応などの**間接的・汎用的・営業関連（セールスアジャセント）な経験**が確認できる場合は、必ず明示的に言及してください。
-- 間接的または汎用的な経験が存在する場合、その評価は必ず「△」とし、「×」を付けてはいけません。
-- 「×」を付けられるのは、直接的・間接的を問わず、関連する経験や根拠がCV上に**一切確認できない場合のみ**です。
-- 経験が短期間、非公式、職務名に含まれない場合でも、「間接的」「非典型的な経験」として評価し、「経験なし」と表現してはいけません。
-- 関連する根拠が見つからない場合は、必ず「提供されたCV上では明確な根拠を確認できません」と記述してください。
-- 間接的な経験を見落として「経験がない」と評価することは重大な評価ミスと見なされます。
-
-以下の3つの観点で評価してください。
-
-【評価記号の定義】
-○：職務要件を十分に満たす、直接的かつ職務関連性の高い経験が確認できる  
-△：直接的ではないが、汎用的・間接的・限定的な関連経験が確認できる  
-×：関連する経験や根拠が一切確認できない  
-
-【評価項目】
-1. 必須要件（required_experience）
-2. 歓迎要件（desired_experience, target_candidate）
-3. 職務内容との適合性（job_content）
-
-【各評価項目について必ず行うこと】
-- CV内の具体的な記載内容（職務、行動、成果、エピソード）を明示または要約する
-- その経験が評価につながる理由を説明する
-- 採用判断においての意味・影響を説明する
-- 間接的な経験である場合は明示する
-- 採用担当者に前向きに伝える1文を含める
-
-【総合評価】
-- 強み・制約・育成余地・採用上のリスクを整理
-- 内定獲得確率を0〜100％で推定
+【評価記号】
+○：直接的な関連経験あり
+△：間接的・汎用的な関連経験あり
+×：関連経験の記載なし
 
 【出力形式（厳守）】
-- 有効なJSONのみ
-- JSON以外の文章を一切含めない
-
 {{
   "score": 0,
-  "summary_reason": "",
+  "summary_reason": "60文字以内・1文",
   "criteria": {{
-    "must_have_requirements": {{ "rating": "○|△|×", "reason": "" }},
-    "preferred_requirements": {{ "rating": "○|△|×", "reason": "" }},
-    "role_alignment": {{ "rating": "○|△|×", "reason": "" }}
+    "must_have_requirements": {{ "rating": "○|△|×", "reason": "1文のみ" }},
+    "preferred_requirements": {{ "rating": "○|△|×", "reason": "1文のみ" }},
+    "role_alignment": {{ "rating": "○|△|×", "reason": "1文のみ" }}
   }}
 }}
 
-【候補者の履歴書（CV）】
+【履歴書（CV）】
 \"\"\"
-{cv_text[:6000]}
+{cv_text[:4000]}
 \"\"\"
 
 【求人情報】
 職種名：{job["title"]}
 企業名：{job["company_name"]}
-求人URL：{job["job_id"]}
-書類通過率：{job["passrate_for_doc_screening"]}
-内定率：{job["documents_to_job_offer_ratio"]}
-紹介手数料：{job["fee"]}
 
 【職務内容】
-{job["job_context"]}
+{job["job_context"][:2000]}
 """
 
     try:
@@ -258,15 +222,13 @@ def ai_match_job(cv_text, job, model_name):
             prompt,
             generation_config={
                 "temperature": 0.2,
-                "max_output_tokens": 3072,
+                "max_output_tokens": 2048,
             }
         )
-        
-        raw = response.text
 
+        raw = response.text
         if not raw:
             raise ValueError("Empty response from Gemini")
-
 
         # Remove markdown fences if present
         if raw.startswith("```"):
@@ -287,14 +249,15 @@ def ai_match_job(cv_text, job, model_name):
             "raw": raw if "raw" in locals() else None,
             "data": {
                 "score": 0,
-                "summary_reason": "AI service temporarily unavailable.",
+                "summary_reason": "評価を完了できませんでした。",
                 "criteria": {
-                    "must_have_requirements": {"rating": "×", "reason": "Evaluation failed"},
-                    "preferred_requirements": {"rating": "×", "reason": "Evaluation failed"},
-                    "role_alignment": {"rating": "×", "reason": "Evaluation failed"},
+                    "must_have_requirements": {"rating": "×", "reason": "評価失敗"},
+                    "preferred_requirements": {"rating": "×", "reason": "評価失敗"},
+                    "role_alignment": {"rating": "×", "reason": "評価失敗"},
                 }
             }
         }
+
 
 # ----------------------------
 # UI
