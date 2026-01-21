@@ -121,48 +121,55 @@ def ai_match_job(cv_text, job):
     Pure logic function – NO Streamlit calls inside.
     """
     prompt = f"""
-You are a senior career advisor at a professional recruitment agency with deep experience in CV screening and hiring decisions.
+あなたは、採用・書類選考の実務経験が豊富なプロフェッショナルな人材アドバイザーです。
 
-Your task is to evaluate how likely the following candidate is to receive a job offer for the specific role described below, based STRICTLY on the evidence present in the CV text provided.
+以下の候補者が、この職種において内定を獲得できる可能性について、
+**提供された履歴書（CV）の記載内容のみ**を根拠として、厳密に評価してください。
 
-IMPORTANT EVIDENCE & RATING RULES (MANDATORY):
-- You MUST ground every evaluation in explicit evidence from the CV text.
-- You are NOT allowed to state that a candidate lacks a skill, industry experience, or qualification if it is explicitly mentioned anywhere in the CV text.
-- If the CV shows INDIRECT, TRANSFERABLE, or SALES-ADJACENT experience (e.g. negotiation, persuasion, stakeholder approval, client-facing work), you MUST acknowledge it explicitly.
-- INDIRECT or TRANSFERABLE experience MUST be rated as △ (partial) — NOT ×.
-- You may ONLY assign × when the CV contains NO relevant evidence at all, including indirect or transferable experience.
-- If evidence exists but is informal, brief, or not part of a formal job title, describe it as “indirect” or “non-traditional” rather than “absent”.
-- If you cannot find any relevant evidence, you MUST say: "No clear evidence found in the provided CV text".
-- False negatives (claiming absence when indirect evidence exists) are considered a serious evaluation error and must be avoided.
+【言語要件（必須）】
+- 評価内容はすべて日本語で記述してください。
+- 英語は一切使用しないでください。
+- 採用担当者が社内で共有する評価コメントとして自然で客観的なビジネス日本語を使用してください。
+- JSONのキー名は変更せず、値（score以外の文章）はすべて日本語で記述してください。
 
-Evaluate the candidate using the three criteria below.
+【重要な評価ルール（必須）】
+- すべての評価は、CVに明示的に記載されている事実・経験のみを根拠としてください。
+- CVに記載されているスキル・業界経験・資格について、「不足している」「経験がない」と断定してはいけません。
+- 交渉、説得、関係者調整、顧客対応などの**間接的・汎用的・営業関連（セールスアジャセント）な経験**が確認できる場合は、必ず明示的に言及してください。
+- 間接的または汎用的な経験が存在する場合、その評価は必ず「△」とし、「×」を付けてはいけません。
+- 「×」を付けられるのは、直接的・間接的を問わず、関連する経験や根拠がCV上に**一切確認できない場合のみ**です。
+- 経験が短期間、非公式、職務名に含まれない場合でも、「間接的」「非典型的な経験」として評価し、「経験なし」と表現してはいけません。
+- 関連する根拠が見つからない場合は、必ず「提供されたCV上では明確な根拠を確認できません」と記述してください。
+- 間接的な経験を見落として「経験がない」と評価することは重大な評価ミスと見なされます。
 
-For each criterion, assign a rating using:
-○ = Strongly meets requirements through direct, role-specific experience  
-△ = Partially meets requirements through indirect, transferable, or limited experience  
-× = Does not meet requirements due to complete absence of relevant evidence  
+以下の3つの観点で評価してください。
 
-CRITERIA:
-1. Must-have requirements (required_experience)
-2. Preferred requirements (desired_experience, target_candidate)
-3. Role responsibility alignment (job_content)
+【評価記号の定義】
+○：職務要件を十分に満たす直接的・職務関連性の高い経験がある  
+△：間接的・汎用的、または限定的ではあるが関連する経験がある  
+×：関連する経験や根拠が一切確認できない  
 
-FOR EACH CRITERION, YOU MUST:
-- Quote or clearly reference the specific CV evidence used
-- Explain how this evidence supports the chosen rating
-- If experience is indirect or transferable, explicitly label it as such
-- Include ONE sentence explaining how a recruiter could communicate this evaluation constructively to the candidate
+【評価項目】
+1. 必須要件（required_experience）
+2. 歓迎要件（desired_experience, target_candidate）
+3. 職務内容との適合性（job_content）
 
-AFTER EVALUATING ALL CRITERIA:
-- Write a concise overall summary synthesizing strengths, limitations, and hiring risk
-- Estimate the overall probability of receiving a job offer (0–100 percent), using realistic hiring standards for this role
+【各評価項目について必ず行うこと】
+- CV内の具体的な記載内容（職務、経験、行動、成果など）を明示または引用する
+- その根拠がなぜ該当評価（○/△/×）につながるのかを説明する
+- 間接的・汎用的な経験である場合は、その旨を明確に記述する
+- 採用担当者が候補者に対して、建設的かつ前向きにどのように伝えられるかを1文で記載する
 
-OUTPUT FORMAT RULES (STRICT):
-- Return ONLY valid JSON
-- Do NOT include any text outside the JSON object
-- Do NOT copy example values
+【全体評価】
+- 強み・制約・採用上のリスクを統合した簡潔な総合コメントを書く
+- 当該職種における内定獲得確率を0〜100％で推定する（現実的な採用基準に基づく）
 
-Required JSON structure:
+【出力形式（厳守）】
+- 出力は有効なJSONのみとする
+- JSON以外の文章を一切含めない
+- 以下の構造例の値をコピーしないこと
+
+必要なJSON構造：
 
 {{
   "score": 0,
@@ -174,20 +181,20 @@ Required JSON structure:
   }}
 }}
 
-Candidate CV:
+【候補者の履歴書（CV）】
 \"\"\"
 {cv_text[:6000]}
 \"\"\"
 
-Job Information:
-Title: {job["title"]}
-Company: {job["company_name"]}
-Job URL: {job["job_id"]}
-Document Pass Rate: {job["passrate_for_doc_screening"]}
-Offer Rate: {job["documents_to_job_offer_ratio"]}
-Fee: {job["fee"]}
+【求人情報】
+職種名：{job["title"]}
+企業名：{job["company_name"]}
+求人URL：{job["job_id"]}
+書類通過率：{job["passrate_for_doc_screening"]}
+内定率：{job["documents_to_job_offer_ratio"]}
+紹介手数料：{job["fee"]}
 
-Job Description:
+【職務内容】
 {job["job_context"]}
 """
 
