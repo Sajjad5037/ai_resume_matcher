@@ -5,17 +5,28 @@ from docx import Document
 import io
 import pandas as pd
 import json
-from openai import OpenAI
+#from openai import OpenAI
 import re
+import google.generativeai as genai
+
+# ----------------------------
+# Gemini api setup
+# ----------------------------
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+api_key = os.getenv("GOOGLE_API_KEY")
+
+if not api_key:
+    st.error("Gemini API key (GOOGLE_API_KEY) is NOT loaded. Check Streamlit Secrets.")
+    st.stop()
 
 # ----------------------------
 # OpenAI setup
 # ----------------------------
-if not os.getenv("OPENAI_API_KEY"):
-    st.error("OPENAI_API_KEY is NOT loaded. Check Streamlit Secrets.")
-    st.stop()
+#if not os.getenv("OPENAI_API_KEY"):
+#    st.error("OPENAI_API_KEY is NOT loaded. Check Streamlit Secrets.")
+#    st.stop()
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+#client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
 # ----------------------------
@@ -26,7 +37,8 @@ st.set_page_config(
     layout="centered"
 )
 
-st.success("OPENAI_API_KEY loaded successfully.")
+st.success("Gemini API key loaded successfully.")
+
 
 st.title("AI Resume Matcher (9:40)")
 st.write("Upload a candidate CV to see which jobs are most likely to result in an offer.")
@@ -117,9 +129,10 @@ def get_available_jobs():
 
 def ai_match_job(cv_text, job):
     """
-    Uses OpenAI to evaluate CV vs job context.
+    Uses Gemini to evaluate CV vs job context.
     Pure logic function – NO Streamlit calls inside.
     """
+
     prompt = f"""
 あなたは、採用・書類選考の実務経験が豊富なプロフェッショナルな人材アドバイザーです。
 
@@ -156,24 +169,18 @@ def ai_match_job(cv_text, job):
 
 【各評価項目について必ず行うこと】
 - CV内の具体的な記載内容（職務、行動、成果、エピソード）を明示または要約する
-- その経験が評価につながる理由を説明する（なぜ○/△/×なのか）
-- 採用判断において、その経験がどのような意味・影響を持つかを説明する
-- 間接的・汎用的な経験である場合は、その旨を明確に記述する
-- 採用担当者が候補者に対して、どのように前向きかつ建設的に伝えられるかを1文で記載する
-
-※ 各評価理由は、内容の重複を避けつつ、原則として2〜3文程度で簡潔にまとめてください。
+- その経験が評価につながる理由を説明する
+- 採用判断においての意味・影響を説明する
+- 間接的な経験である場合は明示する
+- 採用担当者に前向きに伝える1文を含める
 
 【総合評価】
-- 各評価項目を踏まえ、候補者の強み・制約・育成余地・採用上のリスクを統合的に整理してください。
-- 単なる要約ではなく、「なぜその評価になるのか」が分かる説明を含めてください。
-- 当該職種における内定獲得確率を0〜100％で推定してください（現実的な採用基準に基づく）。
+- 強み・制約・育成余地・採用上のリスクを整理
+- 内定獲得確率を0〜100％で推定
 
 【出力形式（厳守）】
-- 出力は有効なJSONのみとする
+- 有効なJSONのみ
 - JSON以外の文章を一切含めない
-- 以下の構造例の値をコピーしないこと
-
-必要なJSON構造：
 
 {{
   "score": 0,
@@ -202,18 +209,21 @@ def ai_match_job(cv_text, job):
 {job["job_context"]}
 """
 
-
     try:
-        response = client.chat.completions.create(
-            model="gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "You evaluate candidate-job fit objectively."},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.2
+        model = genai.GenerativeModel("gemini-1.5-pro")
+
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": 0.2,
+                "max_output_tokens": 2048,
+            }
         )
 
-        raw = response.choices[0].message.content.strip()
+        raw = response.text.strip() if response.text else ""
+        if not raw:
+            raise ValueError("Empty response from Gemini")
+
 
         # Remove markdown fences if present
         if raw.startswith("```"):
@@ -242,7 +252,6 @@ def ai_match_job(cv_text, job):
                 }
             }
         }
-
 
 # ----------------------------
 # UI
