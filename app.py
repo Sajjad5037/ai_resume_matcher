@@ -118,6 +118,7 @@ def get_available_jobs():
 def ai_match_job(cv_text, job):
     """
     Uses OpenAI to evaluate CV vs job context.
+    Pure logic function – NO Streamlit calls inside.
     """
     prompt = f"""
 You are a senior career advisor at a professional recruitment agency with deep experience in CV screening and hiring decisions.
@@ -144,41 +145,29 @@ CRITERIA:
 3. Role responsibility alignment (job_content)
 
 FOR EACH CRITERION, YOU MUST:
-- Reference specific evidence from the CV (roles, industries, responsibilities, achievements, or keywords)
+- Reference specific evidence from the CV
 - Explain clearly how this evidence supports your rating
 - If evidence is ambiguous or limited, explicitly state that ambiguity
-- Include ONE sentence explaining how a recruiter or employee could communicate this evaluation to the candidate in a constructive and professional manner
+- Include ONE sentence explaining how a recruiter could communicate this evaluation constructively
 
 AFTER EVALUATING ALL CRITERIA:
-- Write a concise but insightful overall summary synthesizing strengths, weaknesses, and hiring risks
-- Estimate the overall probability of receiving a job offer (0–100 percent), using realistic hiring standards for this role
+- Write a concise overall summary
+- Estimate the overall probability of receiving a job offer (0–100 percent)
 
 OUTPUT FORMAT RULES (STRICT):
 - Return ONLY valid JSON
 - Do NOT include any text outside the JSON object
-- All explanations must be grounded in CV evidence or explicitly state when evidence is unclear or missing
-- The JSON example below is a STRUCTURE EXAMPLE ONLY. Do NOT copy its values.
-- Do NOT copy the example values. Generate new values based on the CV and job.
+- Do NOT copy example values
 
-
-Return the result in the following JSON structure:
+Required JSON structure:
 
 {
-  "score": 75,
-  "summary_reason": "Overall evaluation text",
+  "score": 0,
+  "summary_reason": "",
   "criteria": {
-    "must_have_requirements": {
-      "rating": "○|△|×",
-      "reason": "Evidence-based explanation"
-    },
-    "preferred_requirements": {
-      "rating": "○|△|×",
-      "reason": "Evidence-based explanation or stated ambiguity"
-    },
-    "role_alignment": {
-      "rating": "○|△|×",
-      "reason": "Evidence-based alignment explanation"
-    }
+    "must_have_requirements": { "rating": "○|△|×", "reason": "" },
+    "preferred_requirements": { "rating": "○|△|×", "reason": "" },
+    "role_alignment": { "rating": "○|△|×", "reason": "" }
   }
 }
 
@@ -198,6 +187,7 @@ Fee: {job["fee"]}
 Job Description:
 {job["job_context"]}
 """
+
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -210,31 +200,33 @@ Job Description:
 
         raw = response.choices[0].message.content.strip()
 
+        # Remove markdown fences if present
         if raw.startswith("```"):
             raw = raw.strip("`").replace("json", "", 1).strip()
 
-        st.info("RAW MODEL OUTPUT (DEBUG)")
-        st.write("Raw output length:", len(raw))
-        st.text(str(raw)[:5000])
-        st.text(str(raw)[:5000])
+        parsed = extract_json(raw)
 
-
-
-        return extract_json(raw)
-
-    except Exception as e:
-        st.error("AI MATCH ERROR")
-        st.exception(e)
         return {
-            "score": 0,
-            "summary_reason": "AI service temporarily unavailable.",
-            "criteria": {
-                "must_have_requirements": {"rating": "×", "reason": "Evaluation failed"},
-                "preferred_requirements": {"rating": "×", "reason": "Evaluation failed"},
-                "role_alignment": {"rating": "×", "reason": "Evaluation failed"},
-            }
+            "ok": True,
+            "data": parsed,
+            "raw": raw
         }
 
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": str(e),
+            "raw": raw if "raw" in locals() else None,
+            "data": {
+                "score": 0,
+                "summary_reason": "AI service temporarily unavailable.",
+                "criteria": {
+                    "must_have_requirements": {"rating": "×", "reason": "Evaluation failed"},
+                    "preferred_requirements": {"rating": "×", "reason": "Evaluation failed"},
+                    "role_alignment": {"rating": "×", "reason": "Evaluation failed"},
+                }
+            }
+        }
 
 
 # ----------------------------
@@ -269,12 +261,22 @@ if uploaded_file:
             progress.info(f"Evaluating job {i} of {total_jobs}: {job['title']}")
             result = ai_match_job(cv_text, job)
 
+            if not result["ok"]:
+                st.error("AI MATCH ERROR")
+                st.text(result["error"])
+                if result["raw"]:
+                    st.text(result["raw"][:3000])
+            
+            parsed = result["data"]
+
+
             results.append({
                 "job": job,
-                "score": result["score"],
-                "reason": result["summary_reason"],
-                "criteria": result["criteria"]
+                "score": result["data"]["score"],
+                "reason": result["data"]["summary_reason"],
+                "criteria": result["data"]["criteria"]
             })
+
 
         results.sort(key=lambda x: x["score"], reverse=True)
 
