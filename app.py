@@ -125,19 +125,22 @@ You are a senior career advisor at a professional recruitment agency with deep e
 
 Your task is to evaluate how likely the following candidate is to receive a job offer for the specific role described below, based STRICTLY on the evidence present in the CV text provided.
 
-IMPORTANT EVIDENCE RULES (MANDATORY):
+IMPORTANT EVIDENCE & RATING RULES (MANDATORY):
 - You MUST ground every evaluation in explicit evidence from the CV text.
 - You are NOT allowed to state that a candidate lacks a skill, industry experience, or qualification if it is explicitly mentioned anywhere in the CV text.
-- If the CV contains relevant experience but it is brief, indirect, or not clearly quantified, you MUST acknowledge its presence and describe it as limited, indirect, or weak — NOT absent.
-- If you cannot find clear evidence for a requirement, you MUST say: "No clear evidence found in the provided CV text" rather than asserting absence.
-- False negatives (claiming lack of experience when it exists in the CV) are considered a serious evaluation error and must be avoided.
+- If the CV shows INDIRECT, TRANSFERABLE, or SALES-ADJACENT experience (e.g. negotiation, persuasion, stakeholder approval, client-facing work), you MUST acknowledge it explicitly.
+- INDIRECT or TRANSFERABLE experience MUST be rated as △ (partial) — NOT ×.
+- You may ONLY assign × when the CV contains NO relevant evidence at all, including indirect or transferable experience.
+- If evidence exists but is informal, brief, or not part of a formal job title, describe it as “indirect” or “non-traditional” rather than “absent”.
+- If you cannot find any relevant evidence, you MUST say: "No clear evidence found in the provided CV text".
+- False negatives (claiming absence when indirect evidence exists) are considered a serious evaluation error and must be avoided.
 
 Evaluate the candidate using the three criteria below.
 
 For each criterion, assign a rating using:
-○ = Strongly meets requirements  
-△ = Partially meets requirements or meets them with limitations  
-× = Does not meet requirements based on CV evidence  
+○ = Strongly meets requirements through direct, role-specific experience  
+△ = Partially meets requirements through indirect, transferable, or limited experience  
+× = Does not meet requirements due to complete absence of relevant evidence  
 
 CRITERIA:
 1. Must-have requirements (required_experience)
@@ -145,14 +148,14 @@ CRITERIA:
 3. Role responsibility alignment (job_content)
 
 FOR EACH CRITERION, YOU MUST:
-- Reference specific evidence from the CV
-- Explain clearly how this evidence supports your rating
-- If evidence is ambiguous or limited, explicitly state that ambiguity
-- Include ONE sentence explaining how a recruiter could communicate this evaluation constructively
+- Quote or clearly reference the specific CV evidence used
+- Explain how this evidence supports the chosen rating
+- If experience is indirect or transferable, explicitly label it as such
+- Include ONE sentence explaining how a recruiter could communicate this evaluation constructively to the candidate
 
 AFTER EVALUATING ALL CRITERIA:
-- Write a concise overall summary
-- Estimate the overall probability of receiving a job offer (0–100 percent)
+- Write a concise overall summary synthesizing strengths, limitations, and hiring risk
+- Estimate the overall probability of receiving a job offer (0–100 percent), using realistic hiring standards for this role
 
 OUTPUT FORMAT RULES (STRICT):
 - Return ONLY valid JSON
@@ -187,6 +190,7 @@ Fee: {job["fee"]}
 Job Description:
 {job["job_context"]}
 """
+
 
     try:
         response = client.chat.completions.create(
