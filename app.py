@@ -175,11 +175,13 @@ def ai_match_job(cv_text, job, model_name):
 
     prompt = f"""
 You must output VALID JSON ONLY.
+Do not include explanations outside JSON.
 
 Rules:
-- Do not use long sentences.
-- Each reason must be ONE short sentence.
-- Do not include line breaks inside strings.
+- Each text field must be ONE short sentence.
+- Do NOT use commas inside strings.
+- Do NOT use line breaks inside strings.
+- Keep all values short.
 
 JSON schema:
 {{
@@ -193,10 +195,10 @@ JSON schema:
 }}
 
 Candidate CV:
-{cv_text[:2500]}
+{cv_text[:2000]}
 
-Job:
-{job["job_context"][:1200]}
+Job description:
+{job["job_context"][:1000]}
 """
 
 
@@ -206,18 +208,16 @@ Job:
         response = model.generate_content(
             prompt,
             generation_config={
-                "temperature": 0.2,
-                "max_output_tokens": 2048,
-                # 🔑 THIS IS THE KEY FIX
+                "temperature": 0.1,
+                "max_output_tokens": 800,
                 "response_mime_type": "application/json",
             }
         )
-
         raw = response.text
         if not raw:
             raise ValueError("Empty response from Gemini")
 
-        parsed = json.loads(raw)  # no regex needed anymore
+        parsed = json.loads(raw.strip())
 
         return {
             "ok": True,
