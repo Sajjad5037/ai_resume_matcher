@@ -78,10 +78,22 @@ st.caption(f"Using model: `{SELECTED_MODEL}`")
 st.write("Upload a candidate CV to see which jobs are most likely to result in an offer.")
 
 def extract_json(text):
-    match = re.search(r"\{.*\}", text, re.DOTALL)
-    if not match:
+    # Find the first opening brace
+    start = text.find("{")
+    if start == -1:
         raise ValueError("No JSON object found in model output")
-    return json.loads(match.group())
+
+    # Find the last closing brace
+    end = text.rfind("}")
+    if end == -1 or end <= start:
+        raise ValueError("Incomplete JSON object in model output")
+
+    json_str = text[start:end + 1]
+
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"Invalid JSON returned by model: {e}")
 # ----------------------------
 # Helpers
 # ----------------------------
