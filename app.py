@@ -213,8 +213,11 @@ Job Description:
         if raw.startswith("```"):
             raw = raw.strip("`").replace("json", "", 1).strip()
 
-        st.error("RAW MODEL OUTPUT (DEBUG)")
-        st.code(raw)
+        st.info("RAW MODEL OUTPUT (DEBUG)")
+        st.write("Raw output length:", len(raw))
+        st.text(str(raw)[:5000])
+        st.text(str(raw)[:5000])
+
 
 
         return extract_json(raw)
