@@ -1,7 +1,7 @@
 import os 
 import streamlit as st
 from pypdf import PdfReader
-from docx import Document
+from docx import Document 
 import io
 import pandas as pd
 import json 
