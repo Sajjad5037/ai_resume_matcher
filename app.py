@@ -7,7 +7,7 @@ import pandas as pd
 import json
 #from openai import OpenAI
 import re
-import google.generativeai as genai
+
 
 # ----------------------------
 # Gemini api setup
