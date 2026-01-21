@@ -6,7 +6,7 @@ import io
 import pandas as pd
 import json
 from openai import OpenAI
-
+import re
 
 # ----------------------------
 # OpenAI setup
@@ -28,10 +28,14 @@ st.set_page_config(
 
 st.success("OPENAI_API_KEY loaded successfully.")
 
-st.title("AI Resume Matcher (9:08)")
+st.title("AI Resume Matcher (9:11)")
 st.write("Upload a candidate CV to see which jobs are most likely to result in an offer.")
 
-
+def extract_json(text):
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if not match:
+        raise ValueError("No JSON object found in model output")
+    return json.loads(match.group())
 # ----------------------------
 # Helpers
 # ----------------------------
@@ -154,6 +158,8 @@ OUTPUT FORMAT RULES (STRICT):
 - Do NOT include any text outside the JSON object
 - All explanations must be grounded in CV evidence or explicitly state when evidence is unclear or missing
 - The JSON example below is a STRUCTURE EXAMPLE ONLY. Do NOT copy its values.
+- Do NOT copy the example values. Generate new values based on the CV and job.
+
 
 Return the result in the following JSON structure:
 
@@ -207,7 +213,7 @@ Job Description:
         if raw.startswith("```"):
             raw = raw.strip("`").replace("json", "", 1).strip()
 
-        return json.loads(raw)
+        return extract_json(raw)
 
     except Exception:
         return {
