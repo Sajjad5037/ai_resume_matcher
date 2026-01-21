@@ -72,6 +72,17 @@ st.caption(f"Using model: `{SELECTED_MODEL}`")
 
 st.write("Upload a candidate CV to see which jobs are most likely to result in an offer.")
 
+def parse_explanation(text):
+    sections = {}
+
+    for key in ["SUMMARY", "MUST_HAVE", "PREFERRED", "ALIGNMENT"]:
+        pattern = rf"{key}:(.*?)(?=\n[A-Z_]+:|$)"
+        match = re.search(pattern, text, re.DOTALL)
+        if match:
+            sections[key] = match.group(1).strip()
+
+    return sections
+
 def generate_explanation(cv_text, job, evaluation):
     """
     Plain-text explanation generator (NO JSON)
@@ -80,8 +91,28 @@ def generate_explanation(cv_text, job, evaluation):
     prompt = f"""
 You are an expert hiring consultant.
 
-Based on the evaluation below, explain the candidate’s fit for the role
-in clear, professional English.
+Write a professional evaluation of the candidate for this role.
+
+Structure your response EXACTLY like this:
+
+SUMMARY:
+<1 short paragraph summarizing overall fit and offer likelihood>
+
+MUST_HAVE:
+<short paragraph>
+
+PREFERRED:
+<short paragraph>
+
+ALIGNMENT:
+<short paragraph>
+
+Rules:
+- Use clear professional English
+- No bullet points
+- No markdown
+- Keep each paragraph concise
+- Do NOT mention AI
 
 Evaluation:
 - Must-have requirements: {evaluation["criteria"]["must_have_requirements"]}
@@ -89,19 +120,13 @@ Evaluation:
 - Role alignment: {evaluation["criteria"]["role_alignment"]}
 - Score: {evaluation["score"]}
 
-Guidelines:
-- Write 3 short paragraphs
-- Be factual and professional
-- Do NOT mention AI
-- Do NOT use bullet points
-- Do NOT exceed 150 words
-
 Candidate CV:
 {cv_text[:2000]}
 
 Job description:
 {job["job_context"][:1200]}
 """
+
 
     model = genai.GenerativeModel(SELECTED_MODEL)
 
@@ -394,19 +419,31 @@ if uploaded_file:
 
             
 
-            with st.expander("Evaluation details"):
-                st.write("Must-have requirements:", r["criteria"]["must_have_requirements"])
-                st.write("Preferred requirements:", r["criteria"]["preferred_requirements"])
-                st.write("Role alignment:", r["criteria"]["role_alignment"])
-            
-                if st.button(
-                    f"Explain this evaluation – {job['title']}",
-                    key=f"explain_{job['job_id']}"
-                ):
+            criteria = r.get("criteria", {})
 
-                    with st.spinner("Generating explanation..."):
-                        explanation = generate_explanation(cv_text, job, r)
-                        st.write(explanation)
+            # ---- Explain button ----
+            if st.button(
+                f"Explain this evaluation – {job['title']}",
+                key=f"explain_{job['job_id']}"
+            ):
+                with st.spinner("Generating explanation..."):
+                    explanation = generate_explanation(cv_text, job, r)
+                    sections = parse_explanation(explanation)
+            
+                    # ---- SUMMARY (always visible) ----
+                    st.write(sections.get("SUMMARY", ""))
+            
+                    # ---- DETAILS (collapsible, like screenshot) ----
+                    with st.expander("Evaluation details"):
+                        st.markdown("**Must-have requirements ○**")
+                        st.write(sections.get("MUST_HAVE", ""))
+            
+                        st.markdown("**Preferred requirements ×**")
+                        st.write(sections.get("PREFERRED", ""))
+            
+                        st.markdown("**Role alignment △**")
+                        st.write(sections.get("ALIGNMENT", ""))
+
 
             st.divider()
 
