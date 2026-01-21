@@ -41,6 +41,24 @@ st.success("Gemini API key loaded successfully.")
 
 
 st.title("AI Resume Matcher (9:40)")
+# ----------------------------
+# Model Selection
+# ----------------------------
+MODEL_OPTIONS = {
+    "Gemini 1.5 Pro (High quality)": "models/gemini-1.5-pro-001",
+    "Gemini 1.5 Flash (Fast & cheaper)": "models/gemini-1.5-flash-001",
+}
+
+selected_model_label = st.selectbox(
+    "Select AI model",
+    options=list(MODEL_OPTIONS.keys()),
+    index=0
+)
+
+SELECTED_MODEL = MODEL_OPTIONS[selected_model_label]
+
+st.caption(f"Using model: `{SELECTED_MODEL}`")
+
 st.write("Upload a candidate CV to see which jobs are most likely to result in an offer.")
 
 def extract_json(text):
@@ -127,7 +145,8 @@ def get_available_jobs():
     return jobs
 
 
-def ai_match_job(cv_text, job):
+def ai_match_job(cv_text, job, model_name):
+
     """
     Uses Gemini to evaluate CV vs job context.
     Pure logic function – NO Streamlit calls inside.
@@ -210,7 +229,8 @@ def ai_match_job(cv_text, job):
 """
 
     try:
-        model = genai.GenerativeModel("gemini-1.5-pro")
+        model = genai.GenerativeModel(model_name)
+
 
         response = model.generate_content(
             prompt,
@@ -283,7 +303,8 @@ if uploaded_file:
 
         for i, job in enumerate(jobs, start=1):
             progress.info(f"Evaluating job {i} of {total_jobs}: {job['title']}")
-            result = ai_match_job(cv_text, job)
+            result = ai_match_job(cv_text, job, SELECTED_MODEL)
+
 
             if not result["ok"]:
                 st.error("AI MATCH ERROR")
