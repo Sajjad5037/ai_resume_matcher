@@ -45,9 +45,8 @@ st.title("AI Resume Matcher (9:40)")
 # Model Selection
 # ----------------------------
 MODEL_OPTIONS = {
-    "Gemini 1.5 Flash": "models/gemini-1.5-flash",
-}
-    
+    "Gemini 1.5 Flash (Fast)": "gemini-1.5-flash",
+}    
 
 selected_model_label = st.selectbox(
     "Select AI model",
