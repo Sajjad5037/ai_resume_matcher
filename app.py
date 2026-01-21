@@ -72,6 +72,50 @@ st.caption(f"Using model: `{SELECTED_MODEL}`")
 
 st.write("Upload a candidate CV to see which jobs are most likely to result in an offer.")
 
+def generate_explanation(cv_text, job, evaluation):
+    """
+    Plain-text explanation generator (NO JSON)
+    """
+
+    prompt = f"""
+You are an expert hiring consultant.
+
+Based on the evaluation below, explain the candidate’s fit for the role
+in clear, professional English.
+
+Evaluation:
+- Must-have requirements: {evaluation["criteria"]["must_have_requirements"]}
+- Preferred requirements: {evaluation["criteria"]["preferred_requirements"]}
+- Role alignment: {evaluation["criteria"]["role_alignment"]}
+- Score: {evaluation["score"]}
+
+Guidelines:
+- Write 3 short paragraphs
+- Be factual and professional
+- Do NOT mention AI
+- Do NOT use bullet points
+- Do NOT exceed 150 words
+
+Candidate CV:
+{cv_text[:2000]}
+
+Job description:
+{job["job_context"][:1200]}
+"""
+
+    model = genai.GenerativeModel(SELECTED_MODEL)
+
+    response = model.generate_content(
+        prompt,
+        generation_config={
+            "temperature": 0.3,
+            "max_output_tokens": 400,
+        }
+    )
+
+    return response.text.strip()
+
+
 def generate_with_retry(model, prompt, retries=2):
     last_error = None
 
@@ -278,36 +322,7 @@ Job description:
 
 
 
-    try:
-        model = genai.GenerativeModel(model_name)
-
-        
-        parsed, raw = generate_with_retry(model, prompt)
-
-
-        return {
-            "ok": True,
-            "data": parsed,
-            "raw": raw
-        }
-
-    except Exception as e:
-        return {
-            "ok": False,
-            "error": str(e),
-            "raw": raw if 'raw' in locals() else None,
-
-            "data": {
-                "score": 0,
-                "summary_reason": "AI評価に失敗しました。",
-                "criteria": {
-                    "must_have_requirements": {"rating": "×", "reason": "評価失敗"},
-                    "preferred_requirements": {"rating": "×", "reason": "評価失敗"},
-                    "role_alignment": {"rating": "×", "reason": "評価失敗"},
-                }
-            }
-        }
-
+    
 
 # ----------------------------
 # UI
@@ -354,7 +369,6 @@ if uploaded_file:
             results.append({
                 "job": job,
                 "score": result["data"].get("score", 0),
-                "reason": result["data"].get("summary_reason", "AI evaluation failed"),
                 "criteria": result["data"].get("criteria", {})
             })
 
@@ -378,16 +392,21 @@ if uploaded_file:
                 """
             )
 
-            st.write(r["reason"])
+            
 
             with st.expander("Evaluation details"):
-                for key, label in [
-                    ("must_have_requirements", "Must-have requirements"),
-                    ("preferred_requirements", "Preferred requirements"),
-                    ("role_alignment", "Role alignment")
-                ]:
-                    st.write(label, r["criteria"][key]["rating"])
-                    st.write(r["criteria"][key]["reason"])
+                st.write("Must-have requirements:", r["criteria"]["must_have_requirements"])
+                st.write("Preferred requirements:", r["criteria"]["preferred_requirements"])
+                st.write("Role alignment:", r["criteria"]["role_alignment"])
+            
+                if st.button(
+                    f"Explain this evaluation – {job['title']}",
+                    key=f"explain_{job['job_id']}"
+                ):
+
+                    with st.spinner("Generating explanation..."):
+                        explanation = generate_explanation(cv_text, job, r)
+                        st.write(explanation)
 
             st.divider()
 
