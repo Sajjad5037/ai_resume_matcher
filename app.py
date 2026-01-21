@@ -45,8 +45,7 @@ st.title("AI Resume Matcher (9:40)")
 # Model Selection
 # ----------------------------
 MODEL_OPTIONS = {
-    "Gemini 1.5 Pro (High quality)": "models/gemini-1.5-pro-001",
-    "Gemini 1.5 Flash (Fast & cheaper)": "models/gemini-1.5-flash-001",
+    "Gemini Pro (Stable & Supported)": "models/gemini-1.5-pro-001",
 }
 
 selected_model_label = st.selectbox(
@@ -229,16 +228,30 @@ def ai_match_job(cv_text, job, model_name):
 """
 
     try:
-        model = genai.GenerativeModel(model_name)
+        try:
+            model = genai.GenerativeModel(model_name)
+            response = model.generate_content(
+                prompt,
+                generation_config={
+                    "temperature": 0.2,
+                    "max_output_tokens": 2048,
+                }
+            )
+        except Exception as e:
+            # Fallback if Flash is not available
+            if "flash" in model_name.lower():
+                fallback_model = "models/gemini-1.5-pro-001"
+                model = genai.GenerativeModel(fallback_model)
+                response = model.generate_content(
+                    prompt,
+                    generation_config={
+                        "temperature": 0.2,
+                        "max_output_tokens": 2048,
+                    }
+                )
+            else:
+                raise
 
-
-        response = model.generate_content(
-            prompt,
-            generation_config={
-                "temperature": 0.2,
-                "max_output_tokens": 2048,
-            }
-        )
 
         raw = response.text.strip() if response.text else ""
         if not raw:
