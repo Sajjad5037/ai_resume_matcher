@@ -80,7 +80,7 @@ def generate_with_retry(model, prompt, retries=2):
         prompt,
         generation_config={
             "temperature": 0.1,
-            "max_output_tokens": 2048,
+            "max_output_tokens": 1024,
         },
         safety_settings={
             "HARASSMENT": "BLOCK_NONE",
@@ -208,6 +208,12 @@ All string values MUST be single-line.
 Do NOT include newline characters inside strings.
 Escape all quotes properly.
 
+summary_reason must be concise.
+summary_reason must be under 80 characters.
+summary_reason must NOT include detailed explanations.
+
+Each criteria reason must be under 60 characters.
+
 
 JSON format:
 {{
@@ -226,6 +232,7 @@ Candidate CV:
 Job description:
 {job["job_context"][:1500]}
 """
+
 
     try:
         model = genai.GenerativeModel(model_name)
@@ -302,9 +309,9 @@ if uploaded_file:
 
             results.append({
                 "job": job,
-                "score": result["data"]["score"],
-                "reason": result["data"]["summary_reason"],
-                "criteria": result["data"]["criteria"]
+                "score": result["data"].get("score", 0),
+                "reason": result["data"].get("summary_reason", "AI evaluation failed"),
+                "criteria": result["data"].get("criteria", {})
             })
 
 
