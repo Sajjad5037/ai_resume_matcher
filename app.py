@@ -174,10 +174,14 @@ def ai_match_job(cv_text, job, model_name):
     """
 
     prompt = f"""
-JSONのみを出力してください。
-説明文・前置き・後書きは禁止です。
+You must output VALID JSON ONLY.
 
-出力形式:
+Rules:
+- Do not use long sentences.
+- Each reason must be ONE short sentence.
+- Do not include line breaks inside strings.
+
+JSON schema:
 {{
   "score": 0,
   "summary_reason": "",
@@ -188,12 +192,13 @@ JSONのみを出力してください。
   }}
 }}
 
-【CV】
-{cv_text[:3500]}
+Candidate CV:
+{cv_text[:2500]}
 
-【求人】
-{job["job_context"][:1500]}
+Job:
+{job["job_context"][:1200]}
 """
+
 
     try:
         model = genai.GenerativeModel(model_name)
