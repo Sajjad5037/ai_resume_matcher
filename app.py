@@ -28,7 +28,7 @@ st.set_page_config(
 
 st.success("OPENAI_API_KEY loaded successfully.")
 
-st.title("AI Resume Matcher (9:11)")
+st.title("AI Resume Matcher (9:40)")
 st.write("Upload a candidate CV to see which jobs are most likely to result in an offer.")
 
 def extract_json(text):
