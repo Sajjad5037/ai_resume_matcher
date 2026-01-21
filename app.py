@@ -220,13 +220,10 @@ def get_title(row):
     return "Unknown Role"
 
 
-def get_available_jobs():
+def get_available_jobs(df: pd.DataFrame):
     """
-    Reads the client's Excel schema and builds
-    a structured job context for AI evaluation.
+    Builds structured job contexts from uploaded Excel file
     """
-    df = pd.read_excel("jobs_new.xlsx")
-
     df.columns = df.columns.astype(str).str.strip()
 
     jobs = []
@@ -338,6 +335,11 @@ uploaded_file = st.file_uploader(
     "Upload candidate CV (PDF or DOCX)",
     type=["pdf", "docx"]
 )
+jobs_file = st.file_uploader(
+    "Upload jobs Excel file",
+    type=["xlsx"],
+    key="jobs_excel"
+)
 
 if uploaded_file:
     st.success(f"Uploaded: {uploaded_file.name}")
@@ -352,8 +354,14 @@ if uploaded_file:
     st.subheader("Extracted CV Text")
     st.text_area("", cv_text, height=250)
 
-    if st.button("Evaluate Candidate"):
-        jobs = get_available_jobs()
+    if uploaded_file and jobs_file and st.button("Evaluate Candidate"):
+
+        if not jobs_file:
+            st.error("Please upload a jobs Excel file.")
+            st.stop()
+        
+        jobs_df = pd.read_excel(jobs_file)
+        jobs = get_available_jobs(jobs_df)
         results = []
 
         progress = st.empty()
