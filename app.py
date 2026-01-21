@@ -118,64 +118,70 @@ def ai_match_job(cv_text, job):
     prompt = f"""
 You are a senior career advisor at a professional recruitment agency with deep experience in CV screening and hiring decisions.
 
-Evaluate how likely the following candidate is to receive a job offer for this role.
+Your task is to evaluate how likely the following candidate is to receive a job offer for this role, based STRICTLY on the evidence present in the CV text provided.
 
-You MUST analyze the candidate carefully against the job requirements and explain your reasoning clearly and concretely.
+IMPORTANT EVIDENCE RULES (MANDATORY):
+- You MUST ground every evaluation in explicit evidence from the CV text.
+- You are NOT allowed to state that a candidate lacks a skill, industry experience, or qualification if it is explicitly mentioned anywhere in the CV text.
+- If the CV contains relevant experience but it is brief, indirect, or not clearly quantified, you MUST acknowledge its presence and describe it as limited, indirect, or weak — NOT absent.
+- If you cannot find clear evidence for a requirement, you MUST say: "No clear evidence found in the provided CV text" rather than asserting absence.
+- False negatives (claiming lack of experience when it exists in the CV) are considered a serious evaluation error and must be avoided.
 
-For each of the following criteria, assign a rating using ○ / △ / ×:
+Evaluate the candidate using the three criteria below.
+
+For each criterion, assign a rating using:
+○ = Strongly meets requirements  
+△ = Partially meets requirements or meets them with limitations  
+× = Does not meet requirements based on CV evidence  
+
+CRITERIA:
 1. Must-have requirements (required_experience)
 2. Preferred requirements (desired_experience, target_candidate)
 3. Role responsibility alignment (job_content)
 
-For EACH criterion:
-- Clearly state why the candidate meets or does not meet the requirements
-- Refer to specific skills, experiences, or gaps found in the CV
-- Explain how these factors would realistically affect a recruiter’s decision
-- Avoid generic statements; be explicit and evaluative
-Additionally, for EACH criterion, you MUST include one explicit sentence that explains how a recruiter or employee could communicate this evaluation to a candidate in a constructive and professional way (for example, by framing gaps as development areas or growth opportunities rather than rejections).
+FOR EACH CRITERION, YOU MUST:
+- Reference specific evidence from the CV (roles, industries, responsibilities, achievements, or keywords)
+- Explain clearly how this evidence supports your rating
+- If evidence is ambiguous or limited, explicitly state that ambiguity
+- Include ONE sentence explaining how a recruiter or employee could communicate this evaluation to the candidate in a constructive and professional manner
 
+AFTER EVALUATING ALL CRITERIA:
+- Write a concise but insightful overall summary synthesizing strengths, weaknesses, and hiring risks
+- Estimate the overall probability of receiving a job offer (0–100 percent), using realistic hiring standards for this role
 
-After evaluating all criteria:
-- Write a concise but insightful overall summary explaining the candidate’s strengths, weaknesses, and hiring risks
-- Estimate the overall probability of receiving an offer (0–100 percent), based on typical hiring standards for this role
+OUTPUT FORMAT RULES (STRICT):
+- Return ONLY valid JSON
+- Do NOT include any text outside the JSON object
+- All explanations must be grounded in CV evidence or explicitly state when evidence is unclear or missing
 
-Return ONLY valid JSON in the following format:
+Return the result in EXACTLY the following JSON structure.
+Use a real number for "score" between 0 and 100.
 
-{{
-  "score": number,
-  "summary_reason": "A detailed overall explanation that synthesizes all criteria and reflects real-world hiring judgment",
-  "criteria": {{
-    "must_have_requirements": {{
-      "rating": "○|△|×",
-      "reason": "A clear, specific explanation referencing the CV and job requirements"
-    }},
-    "preferred_requirements": {{
-      "rating": "○|△|×",
-      "reason": "A detailed explanation of missing or matching preferred qualifications and their impact"
-    }},
-    "role_alignment": {{
-      "rating": "○|△|×",
-      "reason": "An explanation of how well the candidate’s background aligns with daily responsibilities of the role"
-    }}
-  }}
-}}
+{
+  "score": 75,
+  "summary_reason": "A detailed overall explanation grounded in CV evidence and real-world hiring judgment",
+  "criteria": {
+    "must_have_requirements": {
+      "rating": "○",
+      "reason": "Evidence-based explanation referencing the CV"
+    },
+    "preferred_requirements": {
+      "rating": "△",
+      "reason": "Evidence-based explanation referencing the CV or explicitly stating ambiguity"
+    },
+    "role_alignment": {
+      "rating": "○",
+      "reason": "Evidence-based explanation of alignment with daily responsibilities"
+    }
+  }
+}
 
 Candidate CV:
 \"\"\"
 {cv_text[:6000]}
 \"\"\"
-
-Job Information:
-Title: {job["title"]}
-Company: {job["company_name"]}
-Job URL: {job["job_id"]}
-Document Pass Rate: {job["passrate_for_doc_screening"]}
-Offer Rate: {job["documents_to_job_offer_ratio"]}
-Fee: {job["fee"]}
-
-Job Description:
-{job["job_context"]}
 """
+
 
     try:
         response = client.chat.completions.create(
