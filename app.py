@@ -58,7 +58,7 @@ except Exception as e:
 # Model Selection
 # ----------------------------
 MODEL_OPTIONS = {
-    "Gemini 2.5 Flash (Recommended)": "models/gemini-2.5-flash"
+    "Gemini 2.5 Pro (GPT-4o-mini equivalent)": "models/gemini-2.5-pro"
 }
 selected_model_label = st.selectbox(
     "Select AI model",
