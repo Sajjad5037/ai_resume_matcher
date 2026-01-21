@@ -58,7 +58,7 @@ except Exception as e:
 # Model Selection
 # ----------------------------
 MODEL_OPTIONS = {
-    "Gemini 2.5 Pro (GPT-4o-mini equivalent)": "models/gemini-2.5-pro"
+    "Gemini 2.5 Flash (Recommended)": "models/gemini-2.5-flash"
 }
 selected_model_label = st.selectbox(
     "Select AI model",
@@ -170,20 +170,14 @@ def get_available_jobs():
 
 def ai_match_job(cv_text, job, model_name):
     """
-    Gemini 3 Flash – strict JSON mode (NO truncation)
+    Gemini 2.5 Flash – JSON-safe, unblockable version
     """
 
     prompt = f"""
-You must output VALID JSON ONLY.
-Do not include explanations outside JSON.
+Return ONLY valid JSON.
+No markdown. No explanations.
 
-Rules:
-- Each text field must be ONE short sentence.
-- Do NOT use commas inside strings.
-- Do NOT use line breaks inside strings.
-- Keep all values short.
-
-JSON schema:
+JSON format:
 {{
   "score": 0,
   "summary_reason": "",
@@ -195,12 +189,11 @@ JSON schema:
 }}
 
 Candidate CV:
-{cv_text[:2000]}
+{cv_text[:3000]}
 
 Job description:
-{job["job_context"][:1000]}
+{job["job_context"][:1500]}
 """
-
 
     try:
         model = genai.GenerativeModel(model_name)
@@ -208,28 +201,30 @@ Job description:
         response = model.generate_content(
             prompt,
             generation_config={
-                "temperature": 0.1,
-                "max_output_tokens": 800,
-                
+                "temperature": 0.2,
+                "max_output_tokens": 1024,
+            },
+            safety_settings={
+                "HARASSMENT": "BLOCK_NONE",
+                "HATE": "BLOCK_NONE",
+                "SEXUAL": "BLOCK_NONE",
+                "DANGEROUS": "BLOCK_NONE",
             }
         )
+
         if not response.candidates:
-            raise ValueError("No candidates returned by Gemini")
-        
+            raise ValueError("No candidates returned")
+
         candidate = response.candidates[0]
-        
+
         if not candidate.content or not candidate.content.parts:
             raise ValueError(
-                f"Gemini returned no content. finish_reason={candidate.finish_reason}"
+                f"No content returned. finish_reason={candidate.finish_reason}"
             )
-        
-        raw = candidate.content.parts[0].text
 
-        if not raw:
-            raise ValueError("Empty response from Gemini")
+        raw = candidate.content.parts[0].text.strip()
 
-        parsed = extract_json(raw)
-
+        parsed = json.loads(raw)
 
         return {
             "ok": True,
@@ -241,10 +236,10 @@ Job description:
         return {
             "ok": False,
             "error": str(e),
-            "raw": raw if "raw" in locals() else None,
+            "raw": None,
             "data": {
                 "score": 0,
-                "summary_reason": "評価を完了できませんでした。",
+                "summary_reason": "AI評価に失敗しました。",
                 "criteria": {
                     "must_have_requirements": {"rating": "×", "reason": "評価失敗"},
                     "preferred_requirements": {"rating": "×", "reason": "評価失敗"},
