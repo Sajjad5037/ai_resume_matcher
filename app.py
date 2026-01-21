@@ -221,7 +221,7 @@ def get_available_jobs():
 
 def ai_match_job(cv_text, job, model_name):
     """
-    Gemini 2.5 Flash – JSON-safe, unblockable version
+    Gemini 2.5 Flash – minimal, deterministic JSON version
     """
 
     prompt = f"""
@@ -229,23 +229,17 @@ Return ONLY valid JSON.
 No markdown. No explanations.
 All string values MUST be single-line.
 Do NOT include newline characters inside strings.
-Escape all quotes properly.
 
-summary_reason must be concise.
-summary_reason must be under 80 characters.
-summary_reason must NOT include detailed explanations.
-
-Each criteria reason must be under 60 characters.
-
+Do NOT include explanations or reasons.
+Only output numeric score and ratings.
 
 JSON format:
 {{
   "score": 0,
-  "summary_reason": "",
   "criteria": {{
-    "must_have_requirements": {{ "rating": "○|△|×", "reason": "" }},
-    "preferred_requirements": {{ "rating": "○|△|×", "reason": "" }},
-    "role_alignment": {{ "rating": "○|△|×", "reason": "" }}
+    "must_have_requirements": "○|△|×",
+    "preferred_requirements": "○|△|×",
+    "role_alignment": "○|△|×"
   }}
 }}
 
@@ -255,6 +249,33 @@ Candidate CV:
 Job description:
 {job["job_context"][:1500]}
 """
+
+    try:
+        model = genai.GenerativeModel(model_name)
+
+        parsed, raw = generate_with_retry(model, prompt)
+
+        return {
+            "ok": True,
+            "data": parsed,
+            "raw": raw
+        }
+
+    except Exception as e:
+        return {
+            "ok": False,
+            "error": str(e),
+            "raw": raw if 'raw' in locals() else None,
+            "data": {
+                "score": 0,
+                "criteria": {
+                    "must_have_requirements": "×",
+                    "preferred_requirements": "×",
+                    "role_alignment": "×"
+                }
+            }
+        }
+
 
 
     try:
