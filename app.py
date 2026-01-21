@@ -170,49 +170,29 @@ def get_available_jobs():
 
 def ai_match_job(cv_text, job, model_name):
     """
-    Uses Gemini to evaluate CV vs job context.
-    Optimized for Gemini 3 Flash (short, strict JSON).
+    Gemini 3 Flash – strict JSON mode (NO truncation)
     """
 
     prompt = f"""
-あなたは採用担当者です。
-以下の履歴書（CV）の**記載内容のみ**を根拠として、
-この求人に対する適合度を評価してください。
+JSONのみを出力してください。
+説明文・前置き・後書きは禁止です。
 
-【必須ルール】
-- 出力は必ず有効なJSONのみ
-- JSON以外の文章は禁止
-- すべて日本語
-- 各文章は必ず1文のみ
-- 長い説明は禁止
-
-【評価記号】
-○：直接的な関連経験あり
-△：間接的・汎用的な関連経験あり
-×：関連経験の記載なし
-
-【出力形式（厳守）】
+出力形式:
 {{
   "score": 0,
-  "summary_reason": "60文字以内・1文",
+  "summary_reason": "",
   "criteria": {{
-    "must_have_requirements": {{ "rating": "○|△|×", "reason": "1文のみ" }},
-    "preferred_requirements": {{ "rating": "○|△|×", "reason": "1文のみ" }},
-    "role_alignment": {{ "rating": "○|△|×", "reason": "1文のみ" }}
+    "must_have_requirements": {{ "rating": "○|△|×", "reason": "" }},
+    "preferred_requirements": {{ "rating": "○|△|×", "reason": "" }},
+    "role_alignment": {{ "rating": "○|△|×", "reason": "" }}
   }}
 }}
 
-【履歴書（CV）】
-\"\"\"
-{cv_text[:4000]}
-\"\"\"
+【CV】
+{cv_text[:3500]}
 
-【求人情報】
-職種名：{job["title"]}
-企業名：{job["company_name"]}
-
-【職務内容】
-{job["job_context"][:2000]}
+【求人】
+{job["job_context"][:1500]}
 """
 
     try:
@@ -223,6 +203,8 @@ def ai_match_job(cv_text, job, model_name):
             generation_config={
                 "temperature": 0.2,
                 "max_output_tokens": 2048,
+                # 🔑 THIS IS THE KEY FIX
+                "response_mime_type": "application/json",
             }
         )
 
@@ -230,11 +212,7 @@ def ai_match_job(cv_text, job, model_name):
         if not raw:
             raise ValueError("Empty response from Gemini")
 
-        # Remove markdown fences if present
-        if raw.startswith("```"):
-            raw = raw.strip("`").replace("json", "", 1).strip()
-
-        parsed = extract_json(raw)
+        parsed = json.loads(raw)  # no regex needed anymore
 
         return {
             "ok": True,
