@@ -75,27 +75,50 @@ st.write("Upload a candidate CV to see which jobs are most likely to result in a
 def generate_with_retry(model, prompt, retries=2):
     last_error = None
 
-    for attempt in range(retries):
+    for attempt in range(1, retries + 1):
+        st.warning(f"[AI DEBUG] Attempt {attempt} / {retries}")
+
         response = model.generate_content(
-        prompt,
-        generation_config={
-            "temperature": 0.1,
-            "max_output_tokens": 1024,
-        },
-        safety_settings={
-            "HARASSMENT": "BLOCK_NONE",
-            "HATE": "BLOCK_NONE",
-            "SEXUAL": "BLOCK_NONE",
-            "DANGEROUS": "BLOCK_NONE",
-        }
-    )
+            prompt,
+            generation_config={
+                "temperature": 0.1,
+                "max_output_tokens": 1024,
+            },
+            safety_settings={
+                "HARASSMENT": "BLOCK_NONE",
+                "HATE": "BLOCK_NONE",
+                "SEXUAL": "BLOCK_NONE",
+                "DANGEROUS": "BLOCK_NONE",
+            }
+        )
 
+        # ---- RAW RESPONSE DIAGNOSTICS ----
+        if not response.candidates:
+            st.error("[AI DEBUG] No candidates returned")
+            last_error = "No candidates"
+            continue
 
-        raw = response.candidates[0].content.parts[0].text.strip()
+        candidate = response.candidates[0]
 
+        if not candidate.content or not candidate.content.parts:
+            st.error(f"[AI DEBUG] Empty content. finish_reason={candidate.finish_reason}")
+            last_error = "Empty content"
+            continue
+
+        raw = candidate.content.parts[0].text
+
+        # ---- LOG RAW META ----
+        st.info(f"[AI DEBUG] Raw length: {len(raw)} characters")
+        st.info(f"[AI DEBUG] Raw preview (first 300 chars):")
+        st.code(raw[:300])
+
+        # ---- JSON PARSE ----
         try:
-            return extract_json(raw), raw
+            parsed = extract_json(raw)
+            st.success("[AI DEBUG] JSON parsed successfully")
+            return parsed, raw
         except Exception as e:
+            st.error(f"[AI DEBUG] JSON parse failed: {e}")
             last_error = e
 
     raise ValueError(f"Failed after retries: {last_error}")
