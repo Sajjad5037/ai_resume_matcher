@@ -72,6 +72,34 @@ st.caption(f"Using model: `{SELECTED_MODEL}`")
 
 st.write("Upload a candidate CV to see which jobs are most likely to result in an offer.")
 
+def generate_with_retry(model, prompt, retries=2):
+    last_error = None
+
+    for attempt in range(retries):
+        response = model.generate_content(
+        prompt,
+        generation_config={
+            "temperature": 0.1,
+            "max_output_tokens": 2048,
+        },
+        safety_settings={
+            "HARASSMENT": "BLOCK_NONE",
+            "HATE": "BLOCK_NONE",
+            "SEXUAL": "BLOCK_NONE",
+            "DANGEROUS": "BLOCK_NONE",
+        }
+    )
+
+
+        raw = response.candidates[0].content.parts[0].text.strip()
+
+        try:
+            return extract_json(raw), raw
+        except Exception as e:
+            last_error = e
+
+    raise ValueError(f"Failed after retries: {last_error}")
+
 def extract_json(text):
     # Find the first opening brace
     start = text.find("{")
@@ -202,36 +230,8 @@ Job description:
     try:
         model = genai.GenerativeModel(model_name)
 
-        response = model.generate_content(
-            prompt,
-            generation_config={
-                "temperature": 0.2,
-                "max_output_tokens": 1024,
-            },
-            safety_settings={
-                "HARASSMENT": "BLOCK_NONE",
-                "HATE": "BLOCK_NONE",
-                "SEXUAL": "BLOCK_NONE",
-                "DANGEROUS": "BLOCK_NONE",
-            }
-        )
-
-        if not response.candidates:
-            raise ValueError("No candidates returned")
-
-        candidate = response.candidates[0]
-
-        if not candidate.content or not candidate.content.parts:
-            raise ValueError(
-                f"No content returned. finish_reason={candidate.finish_reason}"
-            )
-
-        raw = candidate.content.parts[0].text.strip()
-
-        try:
-            parsed = extract_json(raw)
-        except Exception as e:
-            raise ValueError(f"JSON parse failed: {e}\nRAW OUTPUT:\n{raw[:1000]}")
+        
+        parsed, raw = generate_with_retry(model, prompt)
 
 
         return {
@@ -244,7 +244,8 @@ Job description:
         return {
             "ok": False,
             "error": str(e),
-            "raw": None,
+            "raw": raw if 'raw' in locals() else None,
+
             "data": {
                 "score": 0,
                 "summary_reason": "AI評価に失敗しました。",
