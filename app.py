@@ -7,17 +7,16 @@ import pandas as pd
 import json
 #from openai import OpenAI
 import re
+from google import genai
+from google.genai import types
 
-
-# ----------------------------
-# Gemini api setup
-# ----------------------------
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 api_key = os.getenv("GOOGLE_API_KEY")
 
 if not api_key:
-    st.error("Gemini API key (GOOGLE_API_KEY) is NOT loaded. Check Streamlit Secrets.")
+    st.error("GOOGLE_API_KEY is NOT loaded. Check Streamlit Secrets.")
     st.stop()
+
+client = genai.Client(api_key=api_key)
 
 # ----------------------------
 # OpenAI setup
@@ -45,7 +44,7 @@ st.title("AI Resume Matcher (9:40)")
 # Model Selection
 # ----------------------------
 MODEL_OPTIONS = {
-    "Gemini Pro (Stable)": "models/gemini-pro",
+    "Gemini 1.5 Flash": "gemini-1.5-flash",
 }
 
 selected_model_label = st.selectbox(
@@ -228,32 +227,18 @@ def ai_match_job(cv_text, job, model_name):
 """
 
     try:
-        try:
-            model = genai.GenerativeModel(model_name)
-            response = model.generate_content(
-                prompt,
-                generation_config={
-                    "temperature": 0.2,
-                    "max_output_tokens": 2048,
-                }
+        response = client.models.generate_content(
+            model=model_name,
+            contents=prompt,
+            config=types.GenerateContentConfig(
+                temperature=0.2,
+                max_output_tokens=2048,
             )
-        except Exception as e:
-            # Fallback if Flash is not available
-            if "flash" in model_name.lower():
-                fallback_model = "models/gemini-1.5-pro-001"
-                model = genai.GenerativeModel(fallback_model)
-                response = model.generate_content(
-                    prompt,
-                    generation_config={
-                        "temperature": 0.2,
-                        "max_output_tokens": 2048,
-                    }
-                )
-            else:
-                raise
+        )
+        
+        
 
-
-        raw = response.text.strip() if response.text else ""
+        raw = response.text
         if not raw:
             raise ValueError("Empty response from Gemini")
 
