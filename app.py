@@ -213,9 +213,15 @@ Job Description:
         if raw.startswith("```"):
             raw = raw.strip("`").replace("json", "", 1).strip()
 
+        st.error("RAW MODEL OUTPUT (DEBUG)")
+        st.code(raw)
+
+
         return extract_json(raw)
 
-    except Exception:
+    except Exception as e:
+        st.error("AI MATCH ERROR")
+        st.exception(e)
         return {
             "score": 0,
             "summary_reason": "AI service temporarily unavailable.",
@@ -225,6 +231,7 @@ Job Description:
                 "role_alignment": {"rating": "×", "reason": "Evaluation failed"},
             }
         }
+
 
 
 # ----------------------------
