@@ -85,56 +85,67 @@ def parse_explanation(text):
 
 def generate_explanation(cv_text, job, evaluation):
     """
-    Plain-text explanation generator (NO JSON)
+    Elaborate, recruiter-style explanation (human-facing)
     """
 
     prompt = f"""
-You are an expert hiring consultant.
+You are a senior recruitment consultant writing an internal assessment
+for a hiring manager.
 
-Write a professional evaluation of the candidate for this role.
+Explain the candidate’s suitability for the role with clear reasoning,
+professional judgment, and cause-and-effect explanations.
 
 Structure your response EXACTLY like this:
 
 SUMMARY:
-<1 short paragraph summarizing overall fit and offer likelihood>
+Write a well-developed paragraph explaining the overall suitability of
+the candidate and the likelihood of receiving an offer. Explain *why*
+the probability is high or low.
 
 MUST_HAVE:
-<short paragraph>
+Explain in detail how the candidate meets or partially meets the
+must-have requirements. Reference education, experience level, and
+role openness where relevant.
 
 PREFERRED:
-<short paragraph>
+Explain clearly which preferred requirements are missing or weak,
+and why those gaps matter for performance in this role.
 
 ALIGNMENT:
-<short paragraph>
+Discuss how the candidate’s background aligns or does not align with
+the day-to-day responsibilities of the position, including readiness
+and practical fit.
 
-Rules:
-- Use clear professional English
-- No bullet points
-- No markdown
-- Keep each paragraph concise
+Writing rules:
+- Write in professional recruiter tone
+- Use complete, well-reasoned paragraphs
+- Use cause-and-effect language
+- Do NOT use bullet points
+- Do NOT use markdown
 - Do NOT mention AI
+- Be clear, thorough, and explanatory
+- Length: medium-detail (not brief)
 
-Evaluation:
+Evaluation data:
 - Must-have requirements: {evaluation["criteria"]["must_have_requirements"]}
 - Preferred requirements: {evaluation["criteria"]["preferred_requirements"]}
 - Role alignment: {evaluation["criteria"]["role_alignment"]}
 - Score: {evaluation["score"]}
 
 Candidate CV:
-{cv_text[:2000]}
+{cv_text[:2500]}
 
 Job description:
-{job["job_context"][:1200]}
+{job["job_context"][:1500]}
 """
-
 
     model = genai.GenerativeModel(SELECTED_MODEL)
 
     response = model.generate_content(
         prompt,
         generation_config={
-            "temperature": 0.3,
-            "max_output_tokens": 400,
+            "temperature": 0.5,
+            "max_output_tokens": 700,
         }
     )
 
