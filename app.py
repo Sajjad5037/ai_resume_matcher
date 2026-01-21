@@ -145,7 +145,7 @@ def generate_with_retry(model, prompt, retries=2):
     last_error = None
 
     for attempt in range(1, retries + 1):
-        st.warning(f"[AI DEBUG] Attempt {attempt} / {retries}")
+        
 
         response = model.generate_content(
             prompt,
@@ -161,33 +161,20 @@ def generate_with_retry(model, prompt, retries=2):
             }
         )
 
-        # ---- RAW RESPONSE DIAGNOSTICS ----
-        if not response.candidates:
-            st.error("[AI DEBUG] No candidates returned")
-            last_error = "No candidates"
-            continue
-
+        
         candidate = response.candidates[0]
 
-        if not candidate.content or not candidate.content.parts:
-            st.error(f"[AI DEBUG] Empty content. finish_reason={candidate.finish_reason}")
-            last_error = "Empty content"
-            continue
-
+        
         raw = candidate.content.parts[0].text
 
-        # ---- LOG RAW META ----
-        st.info(f"[AI DEBUG] Raw length: {len(raw)} characters")
-        st.info(f"[AI DEBUG] Raw preview (first 300 chars):")
-        st.code(raw[:300])
-
+        
         # ---- JSON PARSE ----
         try:
             parsed = extract_json(raw)
-            st.success("[AI DEBUG] JSON parsed successfully")
+            
             return parsed, raw
         except Exception as e:
-            st.error(f"[AI DEBUG] JSON parse failed: {e}")
+            
             last_error = e
 
     raise ValueError(f"Failed after retries: {last_error}")
