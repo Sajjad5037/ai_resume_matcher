@@ -63,9 +63,8 @@ else:
 # Model Selection
 # ----------------------------
 MODEL_OPTIONS = {
-    "Gemini 1.5 Flash (Fast)": "gemini-1.5-flash",
-}    
-
+    "Gemini 2.5 Flash (Recommended)": "models/gemini-2.5-flash"
+}
 selected_model_label = st.selectbox(
     "Select AI model",
     options=list(MODEL_OPTIONS.keys()),
