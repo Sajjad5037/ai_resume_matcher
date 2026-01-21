@@ -84,59 +84,43 @@ def parse_explanation(text):
     return sections
 
 def generate_explanation(cv_text, job, evaluation):
-    """
-    Elaborate, recruiter-style explanation (human-facing)
-    """
-
     prompt = f"""
-You are a senior recruitment consultant writing an internal assessment
-for a hiring manager.
+あなたは人材紹介会社の優秀なキャリアアドバイザーです。
 
-Explain the candidate’s suitability for the role with clear reasoning,
-professional judgment, and cause-and-effect explanations.
+あなたがサポートしている求職者について、
+以下の評価結果をもとに、なぜこの求人が内定しやすい／しにくいのかを説明してください。
 
-Structure your response EXACTLY like this:
+評価結果：
+① 必須要件：{evaluation["criteria"]["must_have_requirements"]}
+② 歓迎要件：{evaluation["criteria"]["preferred_requirements"]}
+③ 業務内容との親和性：{evaluation["criteria"]["role_alignment"]}
+想定内定確率：{evaluation["score"]}％
+
+説明ルール：
+- 人事・キャリアアドバイザーとしての視点で説明する
+- 箇条書きは使わない
+- 自然な文章で、簡潔かつ具体的に書く
+- AIという言葉は使わない
+
+出力形式（必ず守る）：
 
 SUMMARY:
-Write a well-developed paragraph explaining the overall suitability of
-the candidate and the likelihood of receiving an offer. Explain *why*
-the probability is high or low.
+全体的な内定可能性とその理由
 
 MUST_HAVE:
-Explain in detail how the candidate meets or partially meets the
-must-have requirements. Reference education, experience level, and
-role openness where relevant.
+必須要件についての判断理由
 
 PREFERRED:
-Explain clearly which preferred requirements are missing or weak,
-and why those gaps matter for performance in this role.
+歓迎要件についての判断理由
 
 ALIGNMENT:
-Discuss how the candidate’s background aligns or does not align with
-the day-to-day responsibilities of the position, including readiness
-and practical fit.
+業務内容との親和性についての判断理由
 
-Writing rules:
-- Write in professional recruiter tone
-- Use complete, well-reasoned paragraphs
-- Use cause-and-effect language
-- Do NOT use bullet points
-- Do NOT use markdown
-- Do NOT mention AI
-- Be clear, thorough, and explanatory
-- Length: medium-detail (not brief)
+求職者情報：
+{cv_text[:2000]}
 
-Evaluation data:
-- Must-have requirements: {evaluation["criteria"]["must_have_requirements"]}
-- Preferred requirements: {evaluation["criteria"]["preferred_requirements"]}
-- Role alignment: {evaluation["criteria"]["role_alignment"]}
-- Score: {evaluation["score"]}
-
-Candidate CV:
-{cv_text[:2500]}
-
-Job description:
-{job["job_context"][:1500]}
+求人情報：
+{job["job_context"][:1200]}
 """
 
     model = genai.GenerativeModel(SELECTED_MODEL)
