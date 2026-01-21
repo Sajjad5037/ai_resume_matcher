@@ -263,7 +263,7 @@ def ai_match_job(cv_text, job, model_name):
             prompt,
             generation_config={
                 "temperature": 0.2,
-                "max_output_tokens": 2048,
+                "max_output_tokens": 3072,
             }
         )
         
