@@ -7,8 +7,9 @@ import pandas as pd
 import json 
 #from openai import OpenAI
 import re
-from google import genai
-from google.genai import types
+import google.generativeai as genai
+
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 api_key = os.getenv("GOOGLE_API_KEY")
 
@@ -16,7 +17,7 @@ if not api_key:
     st.error("GOOGLE_API_KEY is NOT loaded. Check Streamlit Secrets.")
     st.stop()
 
-client = genai.Client(api_key=api_key)
+
 
 # ----------------------------
 # OpenAI setup
@@ -44,7 +45,7 @@ st.title("AI Resume Matcher (9:40)")
 # Model Selection
 # ----------------------------
 MODEL_OPTIONS = {
-    "Gemini 1.5 Flash": "models/gemini-1.5-flash-001",
+    "Gemini Pro (Stable)": "gemini-pro",
 }
 
 
@@ -228,18 +229,18 @@ def ai_match_job(cv_text, job, model_name):
 """
 
     try:
-        response = client.models.generate_content(
-            model=model_name,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                temperature=0.2,
-                max_output_tokens=2048,
-            )
+        model = genai.GenerativeModel(model_name)
+
+        response = model.generate_content(
+            prompt,
+            generation_config={
+                "temperature": 0.2,
+                "max_output_tokens": 2048,
+            }
         )
         
-        
-
         raw = response.text
+
         if not raw:
             raise ValueError("Empty response from Gemini")
 
