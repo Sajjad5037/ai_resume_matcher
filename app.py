@@ -1,4 +1,4 @@
-import os
+import os 
 import streamlit as st
 from pypdf import PdfReader
 from docx import Document
