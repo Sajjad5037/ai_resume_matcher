@@ -210,14 +210,26 @@ Job description:
             generation_config={
                 "temperature": 0.1,
                 "max_output_tokens": 800,
-                "response_mime_type": "application/json",
+                
             }
         )
-        raw = response.text
+        if not response.candidates:
+            raise ValueError("No candidates returned by Gemini")
+        
+        candidate = response.candidates[0]
+        
+        if not candidate.content or not candidate.content.parts:
+            raise ValueError(
+                f"Gemini returned no content. finish_reason={candidate.finish_reason}"
+            )
+        
+        raw = candidate.content.parts[0].text
+
         if not raw:
             raise ValueError("Empty response from Gemini")
 
-        parsed = json.loads(raw.strip())
+        parsed = extract_json(raw)
+
 
         return {
             "ok": True,
