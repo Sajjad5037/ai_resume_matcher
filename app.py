@@ -54,11 +54,6 @@ except Exception as e:
     st.error(f"Could not fetch models: {e}")
     available_models = []
 
-# Show the models on the screen so we can see them
-if available_models:
-    st.info(f"Models found in your account: {available_models}")
-else:
-    st.warning("No models found. Check your API key permissions.")
 # ----------------------------
 # Model Selection
 # ----------------------------
