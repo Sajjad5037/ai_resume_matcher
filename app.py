@@ -161,15 +161,15 @@ OUTPUT FORMAT RULES (STRICT):
 
 Required JSON structure:
 
-{
+{{
   "score": 0,
   "summary_reason": "",
-  "criteria": {
-    "must_have_requirements": { "rating": "○|△|×", "reason": "" },
-    "preferred_requirements": { "rating": "○|△|×", "reason": "" },
-    "role_alignment": { "rating": "○|△|×", "reason": "" }
-  }
-}
+  "criteria": {{
+    "must_have_requirements": {{ "rating": "○|△|×", "reason": "" }},
+    "preferred_requirements": {{ "rating": "○|△|×", "reason": "" }},
+    "role_alignment": {{ "rating": "○|△|×", "reason": "" }}
+  }}
+}}
 
 Candidate CV:
 \"\"\"
