@@ -28,7 +28,7 @@ st.set_page_config(
 
 st.success("OPENAI_API_KEY loaded successfully.")
 
-st.title("AI Resume Matcher (8:08)")
+st.title("AI Resume Matcher (9:08)")
 st.write("Upload a candidate CV to see which jobs are most likely to result in an offer.")
 
 
@@ -118,7 +118,7 @@ def ai_match_job(cv_text, job):
     prompt = f"""
 You are a senior career advisor at a professional recruitment agency with deep experience in CV screening and hiring decisions.
 
-Your task is to evaluate how likely the following candidate is to receive a job offer for this role, based STRICTLY on the evidence present in the CV text provided.
+Your task is to evaluate how likely the following candidate is to receive a job offer for the specific role described below, based STRICTLY on the evidence present in the CV text provided.
 
 IMPORTANT EVIDENCE RULES (MANDATORY):
 - You MUST ground every evaluation in explicit evidence from the CV text.
@@ -153,25 +153,25 @@ OUTPUT FORMAT RULES (STRICT):
 - Return ONLY valid JSON
 - Do NOT include any text outside the JSON object
 - All explanations must be grounded in CV evidence or explicitly state when evidence is unclear or missing
+- The JSON example below is a STRUCTURE EXAMPLE ONLY. Do NOT copy its values.
 
-Return the result in EXACTLY the following JSON structure.
-Use a real number for "score" between 0 and 100.
+Return the result in the following JSON structure:
 
 {
   "score": 75,
-  "summary_reason": "A detailed overall explanation grounded in CV evidence and real-world hiring judgment",
+  "summary_reason": "Overall evaluation text",
   "criteria": {
     "must_have_requirements": {
-      "rating": "○",
-      "reason": "Evidence-based explanation referencing the CV"
+      "rating": "○|△|×",
+      "reason": "Evidence-based explanation"
     },
     "preferred_requirements": {
-      "rating": "△",
-      "reason": "Evidence-based explanation referencing the CV or explicitly stating ambiguity"
+      "rating": "○|△|×",
+      "reason": "Evidence-based explanation or stated ambiguity"
     },
     "role_alignment": {
-      "rating": "○",
-      "reason": "Evidence-based explanation of alignment with daily responsibilities"
+      "rating": "○|△|×",
+      "reason": "Evidence-based alignment explanation"
     }
   }
 }
@@ -180,9 +180,18 @@ Candidate CV:
 \"\"\"
 {cv_text[:6000]}
 \"\"\"
+
+Job Information:
+Title: {job["title"]}
+Company: {job["company_name"]}
+Job URL: {job["job_id"]}
+Document Pass Rate: {job["passrate_for_doc_screening"]}
+Offer Rate: {job["documents_to_job_offer_ratio"]}
+Fee: {job["fee"]}
+
+Job Description:
+{job["job_context"]}
 """
-
-
     try:
         response = client.chat.completions.create(
             model="gpt-4o-mini",
