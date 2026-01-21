@@ -176,6 +176,10 @@ def ai_match_job(cv_text, job, model_name):
     prompt = f"""
 Return ONLY valid JSON.
 No markdown. No explanations.
+All string values MUST be single-line.
+Do NOT include newline characters inside strings.
+Escape all quotes properly.
+
 
 JSON format:
 {{
@@ -224,7 +228,11 @@ Job description:
 
         raw = candidate.content.parts[0].text.strip()
 
-        parsed = json.loads(raw)
+        try:
+            parsed = extract_json(raw)
+        except Exception as e:
+            raise ValueError(f"JSON parse failed: {e}\nRAW OUTPUT:\n{raw[:1000]}")
+
 
         return {
             "ok": True,
