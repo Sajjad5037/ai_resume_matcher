@@ -45,7 +45,7 @@ st.title("AI Resume Matcher (9:40)")
 # Model Selection
 # ----------------------------
 MODEL_OPTIONS = {
-    "Gemini Pro (Stable)": "gemini-pro",
+    "Gemini 1.5 Flash (Fast)": "models/gemini-1.5-flash",
 }
 
 
