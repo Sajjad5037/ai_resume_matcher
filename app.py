@@ -69,6 +69,8 @@ try:
 except Exception as e:
     st.error(f"Could not fetch models: {e}")
     available_models = []
+st.write("Available Gemini models for this API key:")
+st.write(available_models)
 
 # ----------------------------
 # Model Selection
