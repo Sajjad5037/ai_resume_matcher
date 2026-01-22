@@ -468,6 +468,10 @@ if uploaded_zip:
     if st.session_state.results:
         st.subheader("CV Folder Evaluation Results")
         for cv_block in st.session_state.results:
+            if not cv_block["results"]:
+                st.warning(f"No valid matches for {cv_block['cv_name']}")
+                continue
+        
             best_job = cv_block["results"][0]
         
             st.success(
