@@ -36,6 +36,9 @@ st.set_page_config(
     page_title="AI Resume Matcher",
     layout="centered"
 )
+if "results" not in st.session_state:
+    st.session_state.results = None
+
 
 st.success("Gemini API key loaded successfully.")
 
@@ -354,16 +357,12 @@ if uploaded_file:
     st.subheader("Extracted CV Text")
     st.text_area("", cv_text, height=250)
 
+    # ✅ BUTTON = COMPUTE ONLY
     if uploaded_file and jobs_file and st.button("Evaluate Candidate"):
-
-        if not jobs_file:
-            st.error("Please upload a jobs Excel file.")
-            st.stop()
-        
         jobs_df = pd.read_excel(jobs_file)
         jobs = get_available_jobs(jobs_df)
-        results = []
 
+        results = []
         progress = st.empty()
         total_jobs = len(jobs)
 
@@ -371,29 +370,24 @@ if uploaded_file:
             progress.info(f"Evaluating job {i} of {total_jobs}: {job['title']}")
             result = ai_match_job(cv_text, job, SELECTED_MODEL)
 
-
-            if not result["ok"]:
-                st.error("AI MATCH ERROR")
-                st.text(result["error"])
-                if result["raw"]:
-                    st.text(result["raw"][:3000])
-            
             parsed = result["data"]
-
 
             results.append({
                 "job": job,
-                "score": result["data"].get("score", 0),
-                "criteria": result["data"].get("criteria", {})
+                "score": parsed.get("score", 0),
+                "criteria": parsed.get("criteria", {})
             })
 
-
         results.sort(key=lambda x: x["score"], reverse=True)
+        st.session_state.results = results
 
+    # ✅ RENDERING = OUTSIDE BUTTON
+    if st.session_state.results:
         st.subheader("Job Match Results")
 
-        for r in results:
+        for r in st.session_state.results:
             job = r["job"]
+
             st.markdown(f"### {job['title']}")
             st.write(f"**Estimated Offer Probability:** {r['score']}%")
 
@@ -407,11 +401,6 @@ if uploaded_file:
                 """
             )
 
-            
-
-            criteria = r.get("criteria", {})
-
-            # ---- Explain button ----
             if st.button(
                 f"Explain this evaluation – {job['title']}",
                 key=f"explain_{job['job_id']}"
@@ -419,25 +408,25 @@ if uploaded_file:
                 with st.spinner("Generating explanation..."):
                     explanation = generate_explanation(cv_text, job, r)
                     sections = parse_explanation(explanation)
-            
-                    # ---- SUMMARY (always visible) ----
+
                     st.write(sections.get("SUMMARY", ""))
-            
-                    # ---- DETAILS (collapsible, like screenshot) ----
+
                     with st.expander("Evaluation details"):
                         st.markdown("**Must-have requirements ○**")
                         st.write(sections.get("MUST_HAVE", ""))
-            
+
                         st.markdown("**Preferred requirements ×**")
                         st.write(sections.get("PREFERRED", ""))
-            
+
                         st.markdown("**Role alignment △**")
                         st.write(sections.get("ALIGNMENT", ""))
 
-
             st.divider()
 
-        best = results[0]
+        best = st.session_state.results[0]
         st.success(
             f"Best match: **{best['job']['title']}** ({best['score']}%)"
         )
+        
+            
+
