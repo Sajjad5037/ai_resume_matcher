@@ -36,7 +36,7 @@ if not api_key:
 # App Config
 # ----------------------------
 st.set_page_config(
-    page_title="AI Resume Matcher",
+    page_title="AI Resume Matcher (new)",
     layout="centered"
 )
 if "results" not in st.session_state:
@@ -146,6 +146,7 @@ def aggregate_candidate_cv_text(uploaded_files):
 def generate_explanation(cv_text, job, evaluation):
     score = evaluation["score"]
 
+    # Create a prompt based on client requirements
     prompt = f"""
 Return ONLY valid JSON.
 Do not include markdown.
@@ -164,11 +165,6 @@ Do not add extra keys.
 - AI、モデル、システムに関する言及は禁止です。
 - 各フィールドは必ず1文以上の完全な文章で記述してください。
 - 内容が不明な場合でも、空欄にはせず、評価文として成立させてください。
-
-【重要整合ルール（厳守）】
-- 想定内定確率が30％未満の場合、評価は慎重または否定的なトーンで記述してください。
-- 想定内定確率が0％の場合、現時点で内定に至る可能性が低いことを明確に示してください。
-- 評価サマリーの内容と想定内定確率は、必ず論理的に一致させてください。
 
 【評価の前提】
 - 評価は、提供されたCVに明示的に記載されている内容のみを根拠としてください。
@@ -210,7 +206,7 @@ Do not add extra keys.
         return safe_parse_json(response.text)
 
     except Exception:
-        # 🔒 Hard safety fallback – NEVER leak raw model text
+        # Hard fallback in case of error
         if score == 0:
             return {
                 "SUMMARY": "提供された履歴書の内容からは、当該職種において内定に至る可能性は現時点では低いと判断されます。",
@@ -542,15 +538,16 @@ if st.session_state.results:
                 st.write(f"**Estimated Offer Probability:** {r['score']}%")
         
                 cols = st.columns(3)
-                cols[0].markdown(f"**Company**<br>{job['company_name']}", unsafe_allow_html=True)
+                cols[0].markdown(f"**会社名**<br>{job['company_name']}", unsafe_allow_html=True)
                 cols[1].markdown(
-                    f"**Doc Pass Rate**<br>{job['passrate_for_doc_screening']}%",
+                    f"**書類通過率**<br>{job['passrate_for_doc_screening']}%",
                     unsafe_allow_html=True
                 )
                 cols[2].markdown(
-                    f"**Offer Rate**<br>{job['documents_to_job_offer_ratio']}",
+                    f"**内定率**<br>{job['documents_to_job_offer_ratio']}",
                     unsafe_allow_html=True
                 )
+
         
                 explain_key = f"{cv_idx}_{job_idx}"
         
