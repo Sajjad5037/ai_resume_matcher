@@ -44,6 +44,9 @@ if "results" not in st.session_state:
 
 if "explanations" not in st.session_state:
     st.session_state.explanations = {}
+if "explain_open" not in st.session_state:
+    st.session_state.explain_open = {}
+
 if "cvs" not in st.session_state:
     st.session_state.cvs = None
 
@@ -474,33 +477,38 @@ if st.session_state.results:
 
                 explain_key = f"{cv_idx}_{job_idx}"
 
+                # --- init open state ---
+                if explain_key not in st.session_state.explain_open:
+                    st.session_state.explain_open[explain_key] = False
+                
+                
+                # --- button only mutates state ---
                 if st.button(
                     f"Explain – {cv_block['cv_name']} – {job['title']}",
                     key=f"explain_btn_{explain_key}"
                 ):
-                    st.session_state.explanations[explain_key] = generate_explanation(
-                        cv_block["cv_text"], job, r
-                    )
-
-                if explain_key in st.session_state.explanations:
-                    sections = st.session_state.explanations[explain_key]
-                    st.markdown("### 📝 評価サマリー")
-                    st.write(sections.get("SUMMARY", ""))
-                    
-                    with st.expander("📊 Evaluation details"):
-                        st.markdown("**必須要件（Must-have）**")
-                        st.write(sections.get("MUST_HAVE", ""))
-                    
-                        st.markdown("**歓迎要件（Preferred）**")
-                        st.write(sections.get("PREFERRED", ""))
-                    
-                        st.markdown("**業務親和性（Alignment）**")
-                        st.write(sections.get("ALIGNMENT", ""))
-
-
-
-
-        
-        
-            
-
+                    st.session_state.explain_open[explain_key] = True
+                
+                    if explain_key not in st.session_state.explanations:
+                        st.session_state.explanations[explain_key] = generate_explanation(
+                            cv_block["cv_text"], job, r
+                        )
+                
+                
+                # --- rendering depends ONLY on state ---
+                if st.session_state.explain_open.get(explain_key, False):
+                    sections = st.session_state.explanations.get(explain_key)
+                
+                    if sections:
+                        st.markdown("### 📝 評価サマリー")
+                        st.write(sections.get("SUMMARY", ""))
+                
+                        with st.expander("📊 Evaluation details", expanded=True):
+                            st.markdown("**必須要件（Must-have）**")
+                            st.write(sections.get("MUST_HAVE", ""))
+                
+                            st.markdown("**歓迎要件（Preferred）**")
+                            st.write(sections.get("PREFERRED", ""))
+                
+                            st.markdown("**業務親和性（Alignment）**")
+                            st.write(sections.get("ALIGNMENT", ""))
