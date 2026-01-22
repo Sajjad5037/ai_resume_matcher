@@ -509,75 +509,62 @@ if st.session_state.results:
             f"**{best_job['job']['title']}** ({best_job['score']}%)"
         )
 
-        with st.expander(
-            f"📄 {cv_block['cv_name']} ({cv_block['cv_type']})",
-            expanded=(st.session_state.active_candidate == cv_idx)
-        ):
-
-
+        st.markdown(f"## 📄 {cv_block['cv_name']} ({cv_block['cv_type']})")
+        st.divider()
+               
+        candidate_container = st.container()
+        
+        with candidate_container:
             st.markdown("**Uploaded Documents:**")
             for name in cv_block.get("cv_files", []):
                 st.markdown(f"- {name}")
-
+        
             for job_idx, r in enumerate(cv_block["results"]):
                 job = r["job"]
-
+        
                 st.markdown(f"### {job['title']}")
                 st.write(f"**Estimated Offer Probability:** {r['score']}%")
-                # --- Job metadata (restored) ---
+        
                 cols = st.columns(3)
-                
-                cols[0].markdown(
-                    f"**Company**<br>{job['company_name']}",
-                    unsafe_allow_html=True
-                )
-                
+                cols[0].markdown(f"**Company**<br>{job['company_name']}", unsafe_allow_html=True)
                 cols[1].markdown(
                     f"**Doc Pass Rate**<br>{job['passrate_for_doc_screening']}%",
                     unsafe_allow_html=True
                 )
-                
                 cols[2].markdown(
                     f"**Offer Rate**<br>{job['documents_to_job_offer_ratio']}",
                     unsafe_allow_html=True
                 )
-                
+        
                 explain_key = f"{cv_idx}_{job_idx}"
-
-                # --- init open state ---
+        
                 if explain_key not in st.session_state.explain_open:
                     st.session_state.explain_open[explain_key] = False
-                
-                
-                # --- button only mutates state ---
+        
                 if st.button(
                     f"Explain – {cv_block['cv_name']} – {job['title']}",
                     key=f"explain_btn_{explain_key}"
                 ):
                     st.session_state.explain_open[explain_key] = True
-                    st.session_state.active_candidate = cv_idx   # ⭐ THIS IS THE KEY FIX
-                
                     if explain_key not in st.session_state.explanations:
                         st.session_state.explanations[explain_key] = generate_explanation(
                             cv_block["cv_text"], job, r
                         )
-
-                
-                
-                # --- rendering depends ONLY on state ---
+        
                 if st.session_state.explain_open.get(explain_key, False):
                     sections = st.session_state.explanations.get(explain_key)
-                
                     if sections:
                         st.markdown("### 📝 評価サマリー")
                         st.write(sections.get("SUMMARY", ""))
-                
+        
                         with st.expander("📊 Evaluation details", expanded=True):
                             st.markdown("**必須要件（Must-have）**")
                             st.write(sections.get("MUST_HAVE", ""))
-                
                             st.markdown("**歓迎要件（Preferred）**")
                             st.write(sections.get("PREFERRED", ""))
-                
                             st.markdown("**業務親和性（Alignment）**")
                             st.write(sections.get("ALIGNMENT", ""))
+        
+        
+        
+                    
