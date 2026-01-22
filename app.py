@@ -51,7 +51,7 @@ if "cvs" not in st.session_state:
 st.success("Gemini API key loaded successfully.")
 
 
-st.title("AI Resume Matcher (new)")
+st.title("AI Resume Matcher (hello)")
 
 
 
@@ -185,7 +185,7 @@ Job description:
         }
 
 
-def generate_with_retry(model, prompt, retries=2):
+def generate_with_retry(model, prompt, retries=1):
     last_error = None
 
     for attempt in range(1, retries + 1):
@@ -422,8 +422,14 @@ if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
             continue
 
         cv_results = []
-        for job in jobs:
-            result = ai_match_job(cv_text, job, SELECTED_MODEL)
+        for job_idx, job in enumerate(jobs, start=1):
+            status.info(
+                f"Evaluating {uploaded_file.name} "
+                f"({idx}/{len(st.session_state.cvs)}) – "
+                f"Job {job_idx}/{len(jobs)}"
+            )
+        
+            result = ai_match_job(cv_text, job, SELECTED_MODEL)    
             cv_results.append({
                 "job": job,
                 "score": result["data"]["score"],
