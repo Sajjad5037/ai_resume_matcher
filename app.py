@@ -49,6 +49,8 @@ if "explain_open" not in st.session_state:
 
 if "cvs" not in st.session_state:
     st.session_state.cvs = None
+if "active_candidate" not in st.session_state:
+    st.session_state.active_candidate = None
 
     
 st.success("Gemini API key loaded successfully.")
@@ -509,11 +511,9 @@ if st.session_state.results:
 
         with st.expander(
             f"📄 {cv_block['cv_name']} ({cv_block['cv_type']})",
-            expanded=any(
-                st.session_state.explain_open.get(f"{cv_idx}_{i}", False)
-                for i in range(len(cv_block["results"]))
-            )
+            expanded=(st.session_state.active_candidate == cv_idx)
         ):
+
 
             st.markdown("**Uploaded Documents:**")
             for name in cv_block.get("cv_files", []):
@@ -555,11 +555,13 @@ if st.session_state.results:
                     key=f"explain_btn_{explain_key}"
                 ):
                     st.session_state.explain_open[explain_key] = True
+                    st.session_state.active_candidate = cv_idx   # ⭐ THIS IS THE KEY FIX
                 
                     if explain_key not in st.session_state.explanations:
                         st.session_state.explanations[explain_key] = generate_explanation(
                             cv_block["cv_text"], job, r
                         )
+
                 
                 
                 # --- rendering depends ONLY on state ---
