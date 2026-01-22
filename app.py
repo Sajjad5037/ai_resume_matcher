@@ -69,14 +69,12 @@ try:
 except Exception as e:
     st.error(f"Could not fetch models: {e}")
     available_models = []
-st.write("Available Gemini models for this API key:")
-st.write(available_models)
 
 # ----------------------------
 # Model Selection
 # ----------------------------
 MODEL_OPTIONS = {
-    "Gemini 3.0 Flash (Recommended)": "models/gemini-3.0-flash"
+    "Gemini 3 Flash (Preview)": "models/gemini-3-flash-preview"
 }
 selected_model_label = st.selectbox(
     "Select AI model",
