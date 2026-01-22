@@ -8,9 +8,9 @@ import json
 #from openai import OpenAI
 import re
 import google.generativeai as genai
-import zipfile
-from tempfile import TemporaryDirectory
-from pathlib import Path
+
+
+
 
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
@@ -90,72 +90,36 @@ def safe_parse_json(text):
         raise ValueError("No valid JSON found")
     return json.loads(text[start:end + 1])
 
-def extract_cvs_from_zip(uploaded_zip):
-    if "cv_tmpdir" not in st.session_state:
-        st.session_state.cv_tmpdir = TemporaryDirectory()
 
-    tmpdir = Path(st.session_state.cv_tmpdir.name)
+def extract_cv_text_from_uploaded_file(uploaded_file) -> str:
+    file_type = uploaded_file.type
 
-    zip_path = tmpdir / "cvs.zip"
-    zip_path.write_bytes(uploaded_zip.read())
+    # PDF
+    if file_type == "application/pdf":
+        reader = PdfReader(uploaded_file)
+        text = []
+        for page in reader.pages:
+            page_text = page.extract_text()
+            if page_text:
+                text.append(page_text)
+        return "\n".join(text)
 
-    with zipfile.ZipFile(zip_path, "r") as z:
-        z.extractall(tmpdir)
+    # DOCX
+    if file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        doc = Document(io.BytesIO(uploaded_file.read()))
+        return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
 
-    cv_paths = [
-        path for path in tmpdir.rglob("*")
-        if path.suffix.lower() in (".pdf", ".docx", ".xlsx")
-    ]
-
-    return cv_paths
-
-def extract_text_from_excel(path: Path) -> str:
-    try:
-        sheets = pd.read_excel(path, sheet_name=None)
-    except Exception:
-        return ""
-
-    blocks = []
-
-    for sheet_name, df in sheets.items():
-        blocks.append(f"【Sheet: {sheet_name}】")
-
-        for _, row in df.iterrows():
-            row_text = " ".join(
-                str(cell) for cell in row.values if not pd.isna(cell)
-            )
-            if row_text.strip():
-                blocks.append(row_text)
-
-    return "\n".join(blocks)
-
-def extract_cv_text_from_path(path: Path) -> str:
-    suffix = path.suffix.lower()
-
-    # ✅ PDF
-    if suffix == ".pdf":
-        try:
-            reader = PdfReader(str(path))
-            text = []
-            for page in reader.pages:
-                page_text = page.extract_text()
-                if page_text:
-                    text.append(page_text)
-            return "\n".join(text)
-        except Exception:
-            return ""
-
-    # ✅ DOCX
-    if suffix == ".docx":
-        try:
-            doc = Document(str(path))
-            return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
-        except Exception:
-            return ""
-
-    # ✅ XLSX
-    if suffix == ".xlsx":
-        return extract_text_from_excel(path)
+    # XLSX
+    if file_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+        df_dict = pd.read_excel(uploaded_file, sheet_name=None)
+        blocks = []
+        for sheet, df in df_dict.items():
+            blocks.append(f"【Sheet: {sheet}】")
+            for _, row in df.iterrows():
+                row_text = " ".join(str(v) for v in row.values if not pd.isna(v))
+                if row_text.strip():
+                    blocks.append(row_text)
+        return "\n".join(blocks)
 
     return ""
 
@@ -415,10 +379,11 @@ Job description:
 # ----------------------------
 # UI
 # ----------------------------
-uploaded_zip = st.file_uploader(
-    "Upload CV folder (ZIP containing PDF / DOCX / XLSX)",
-    type=["zip"],
-    key="cv_zip"
+uploaded_cvs = st.file_uploader(
+    "Upload CV files (PDF / DOCX / XLSX)",
+    type=["pdf", "docx", "xlsx"],
+    accept_multiple_files=True,
+    key="cv_files"
 )
 
 jobs_file = st.file_uploader(
@@ -429,28 +394,24 @@ jobs_file = st.file_uploader(
 
 
 # 🔹 ADD THIS BLOCK HERE (exactly here)
-if uploaded_zip:
-    st.success("CV folder uploaded")
+if uploaded_cvs:
+    st.success("CV files uploaded")
 
-    if st.session_state.cvs is None:
-        st.session_state.cvs = extract_cvs_from_zip(uploaded_zip)
+    st.session_state.cvs = uploaded_cvs
 
-    if not st.session_state.cvs:
-        st.error("No PDF, DOCX, or XLSX files found in the ZIP.")
-        st.stop()
+    st.info(f"{len(uploaded_cvs)} CVs uploaded")
+    
+if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
 
-    st.info(f"{len(st.session_state.cvs)} CVs found in folder")
-
-if uploaded_zip and jobs_file and st.button("Evaluate CV Folder"):
     jobs_df = pd.read_excel(jobs_file)
     jobs = get_available_jobs(jobs_df)
 
     folder_results = []
     progress = st.progress(0)
 
-    for idx, cv_path in enumerate(st.session_state.cvs, start=1):
-
-        cv_text = extract_cv_text_from_path(cv_path)
+    for idx, uploaded_file in enumerate(st.session_state.cvs, start=1):
+        cv_text = extract_cv_text_from_uploaded_file(uploaded_file)
+    
         if not cv_text.strip():
             continue
 
@@ -466,8 +427,9 @@ if uploaded_zip and jobs_file and st.button("Evaluate CV Folder"):
         cv_results.sort(key=lambda x: x["score"], reverse=True)
 
         folder_results.append({
-            "cv_name": cv_path.name,
-            "cv_type": cv_path.suffix.upper().replace(".", ""),
+            "cv_name": uploaded_file.name,
+            "cv_type": uploaded_file.name.split(".")[-1].upper(),
+
             "cv_text": cv_text,
             "results": cv_results
         })
@@ -477,7 +439,8 @@ if uploaded_zip and jobs_file and st.button("Evaluate CV Folder"):
 
     st.session_state.results = folder_results
 if st.session_state.results:
-    st.subheader("CV Folder Evaluation Results")
+    st.subheader("CV Evaluation Results")
+
 
     for cv_idx, cv_block in enumerate(st.session_state.results):
         if not cv_block["results"]:
