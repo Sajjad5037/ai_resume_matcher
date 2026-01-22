@@ -480,10 +480,10 @@ if uploaded_zip:
             )
 
     
-        for cv_block in st.session_state.results:
+        for cv_idx, cv_block in enumerate(st.session_state.results):
             with st.expander(f"📄 {cv_block['cv_name']} ({cv_block['cv_type']})"):
-    
-                for r in cv_block["results"]:
+                for job_idx, r in enumerate(cv_block["results"]):
+
                     job = r["job"]
     
                     st.markdown(f"### {job['title']}")
@@ -501,7 +501,8 @@ if uploaded_zip:
     
                     if st.button(
                         f"Explain – {cv_block['cv_name']} – {job['title']}",
-                        key=f"explain_{cv_block['cv_name']}_{job['job_id']}"
+                        key=f"explain_{cv_idx}_{job_idx}"
+
                     ):
                         with st.spinner("Generating explanation..."):
                             sections = generate_explanation(
