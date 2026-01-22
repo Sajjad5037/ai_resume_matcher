@@ -409,10 +409,12 @@ jobs_file = st.file_uploader(
 )
 
 if uploaded_zip:
+    # 🔑 CLEAR OLD RESULTS WHEN A NEW ZIP IS UPLOADED
+    st.session_state.results = None
+
     st.success("CV folder uploaded")
 
     cvs = extract_cvs_from_zip(uploaded_zip)
-
     if not cvs:
         st.error("No PDF, DOCX, or XLSX files found in the ZIP.")
         st.stop()
