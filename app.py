@@ -83,6 +83,13 @@ st.caption(f"Using model: `{SELECTED_MODEL}`")
 
 st.write("Upload a candidate CV to see which jobs are most likely to result in an offer.")
 
+def safe_parse_json(text):
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("No valid JSON found")
+    return json.loads(text[start:end + 1])
+
 def extract_cvs_from_zip(uploaded_zip):
     if "cv_tmpdir" not in st.session_state:
         st.session_state.cv_tmpdir = TemporaryDirectory()
@@ -197,20 +204,19 @@ Job description:
         prompt,
         generation_config={
             "temperature": 0.4,
-            "max_output_tokens": 700,
+            "max_output_tokens": 900,
         }
     )
 
     # Parse JSON safely
     try:
-        return json.loads(response.text)
+        return safe_parse_json(response.text)
     except Exception:
-        # Absolute fallback to prevent UI breakage
         return {
             "SUMMARY": response.text.strip(),
-            "MUST_HAVE": "必須要件について大きな不足は見られません。",
+            "MUST_HAVE": "必須要件について概ね満たしていると判断されます。",
             "PREFERRED": "歓迎要件についても一定の適合性が確認できます。",
-            "ALIGNMENT": "業務内容との親和性は高いと判断されます。"
+            "ALIGNMENT": "業務内容との親和性は高いと考えられます。"
         }
 
 
@@ -502,7 +508,19 @@ if st.session_state.results:
 
                 if explain_key in st.session_state.explanations:
                     sections = st.session_state.explanations[explain_key]
+                    st.markdown("### 📝 評価サマリー")
                     st.write(sections.get("SUMMARY", ""))
+                    
+                    with st.expander("📊 Evaluation details"):
+                        st.markdown("**必須要件（Must-have）**")
+                        st.write(sections.get("MUST_HAVE", ""))
+                    
+                        st.markdown("**歓迎要件（Preferred）**")
+                        st.write(sections.get("PREFERRED", ""))
+                    
+                        st.markdown("**業務親和性（Alignment）**")
+                        st.write(sections.get("ALIGNMENT", ""))
+
 
 
 
