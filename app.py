@@ -8,6 +8,9 @@ import json
 #from openai import OpenAI
 import re
 import google.generativeai as genai
+import zipfile
+from tempfile import TemporaryDirectory
+from pathlib import Path
 
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
@@ -75,16 +78,69 @@ st.caption(f"Using model: `{SELECTED_MODEL}`")
 
 st.write("Upload a candidate CV to see which jobs are most likely to result in an offer.")
 
-def parse_explanation(text):
-    sections = {}
+def extract_cvs_from_zip(uploaded_zip):
+    if "cv_tmpdir" not in st.session_state:
+        st.session_state.cv_tmpdir = TemporaryDirectory()
 
-    for key in ["SUMMARY", "MUST_HAVE", "PREFERRED", "ALIGNMENT"]:
-        pattern = rf"{key}:(.*?)(?=\n[A-Z_]+:|$)"
-        match = re.search(pattern, text, re.DOTALL)
-        if match:
-            sections[key] = match.group(1).strip()
+    tmpdir = Path(st.session_state.cv_tmpdir.name)
 
-    return sections
+    zip_path = tmpdir / "cvs.zip"
+    zip_path.write_bytes(uploaded_zip.read())
+
+    with zipfile.ZipFile(zip_path, "r") as z:
+        z.extractall(tmpdir)
+
+    cv_paths = [
+        path for path in tmpdir.rglob("*")
+        if path.suffix.lower() in (".pdf", ".docx", ".xlsx")
+    ]
+
+    return cv_paths
+
+def extract_text_from_excel(path: Path) -> str:
+    try:
+        sheets = pd.read_excel(path, sheet_name=None)
+    except Exception:
+        return ""
+
+    blocks = []
+
+    for sheet_name, df in sheets.items():
+        blocks.append(f"【Sheet: {sheet_name}】")
+
+        for _, row in df.iterrows():
+            row_text = " ".join(
+                str(cell) for cell in row.values if not pd.isna(cell)
+            )
+            if row_text.strip():
+                blocks.append(row_text)
+
+    return "\n".join(blocks)
+
+def extract_cv_text_from_path(path: Path) -> str:
+    suffix = path.suffix.lower()
+
+    if suffix in (".pdf", ".docx"):
+        with open(path, "rb") as f:
+            fake_upload = type(
+                "UploadedFile",
+                (),
+                {
+                    "type": (
+                        "application/pdf"
+                        if suffix == ".pdf"
+                        else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                    ),
+                    "read": f.read
+                }
+            )()
+            return extract_text(fake_upload)
+
+    if suffix == ".xlsx":
+        return extract_text_from_excel(path)
+
+    return ""
+
 
 def generate_explanation(cv_text, job, evaluation):
     prompt = f"""
@@ -342,9 +398,9 @@ Job description:
 # ----------------------------
 # UI
 # ----------------------------
-uploaded_file = st.file_uploader(
-    "Upload candidate CV (PDF or DOCX)",
-    type=["pdf", "docx"]
+uploaded_zip = st.file_uploader(
+    "Upload CV folder (ZIP containing PDF / DOCX / XLSX)",
+    type=["zip"]
 )
 jobs_file = st.file_uploader(
     "Upload jobs Excel file",
@@ -352,89 +408,112 @@ jobs_file = st.file_uploader(
     key="jobs_excel"
 )
 
-if uploaded_file:
-    st.success(f"Uploaded: {uploaded_file.name}")
+if uploaded_zip:
+    st.success("CV folder uploaded")
 
-    with st.spinner("Extracting CV text..."):
-        cv_text = extract_text(uploaded_file)
+    cvs = extract_cvs_from_zip(uploaded_zip)
 
-    if not cv_text.strip():
-        st.error("Could not extract text from this file.")
+    if not cvs:
+        st.error("No PDF, DOCX, or XLSX files found in the ZIP.")
         st.stop()
 
-    st.subheader("Extracted CV Text")
-    st.text_area("", cv_text, height=250)
+    st.info(f"{len(cvs)} CVs found in folder")
 
-    # ✅ BUTTON = COMPUTE ONLY
-    if uploaded_file and jobs_file and st.button("Evaluate Candidate"):
+    if jobs_file and st.button("Evaluate CV Folder"):
         jobs_df = pd.read_excel(jobs_file)
         jobs = get_available_jobs(jobs_df)
 
-        results = []
-        progress = st.empty()
-        total_jobs = len(jobs)
+        folder_results = []
+        progress = st.progress(0)
 
-        for i, job in enumerate(jobs, start=1):
-            progress.info(f"Evaluating job {i} of {total_jobs}: {job['title']}")
-            result = ai_match_job(cv_text, job, SELECTED_MODEL)
+        for idx, cv_path in enumerate(cvs, start=1):
+            cv_text = extract_cv_text_from_path(cv_path)
 
-            parsed = result["data"]
+            if not cv_text.strip():
+                continue
 
-            results.append({
-                "job": job,
-                "score": parsed.get("score", 0),
-                "criteria": parsed.get("criteria", {})
+            cv_results = []
+
+            for job in jobs:
+                result = ai_match_job(cv_text, job, SELECTED_MODEL)
+
+                cv_results.append({
+                    "job": job,
+                    "score": result["data"]["score"],
+                    "criteria": result["data"]["criteria"]
+                })
+
+            cv_results.sort(key=lambda x: x["score"], reverse=True)
+
+            folder_results.append({
+                "cv_name": cv_path.name,
+                "cv_type": cv_path.suffix.upper().replace(".", ""),
+                "cv_text": cv_text,
+                "results": cv_results
             })
 
-        results.sort(key=lambda x: x["score"], reverse=True)
-        st.session_state.results = results
+            progress.progress(idx / len(cvs))
+
+        st.session_state.results = folder_results
 
     # ✅ RENDERING = OUTSIDE BUTTON
     if st.session_state.results:
-        st.subheader("Job Match Results")
-
-        for r in st.session_state.results:
-            job = r["job"]
-
-            st.markdown(f"### {job['title']}")
-            st.write(f"**Estimated Offer Probability:** {r['score']}%")
-
-            st.caption(
-                f"""
-                **Company:** {job['company_name']}  
-                **Document pass rate:** {job['passrate_for_doc_screening']}  
-                **Offer rate:** {job['documents_to_job_offer_ratio']}  
-                **Fee:** {job['fee']}  
-                **Job link:** {job['job_id']}
-                """
+        st.subheader("CV Folder Evaluation Results")
+        for cv_block in st.session_state.results:
+            best_job = cv_block["results"][0]
+        
+            st.success(
+                f"Best match for {cv_block['cv_name']}: "
+                f"**{best_job['job']['title']}** ({best_job['score']}%)"
             )
 
-            if st.button(
-                f"Explain this evaluation – {job['title']}",
-                key=f"explain_{job['job_id']}"
-            ):
-                with st.spinner("Generating explanation..."):
-                    sections = generate_explanation(cv_text, job, r)
+    
+        for cv_block in st.session_state.results:
+            with st.expander(f"📄 {cv_block['cv_name']} ({cv_block['cv_type']})"):
+    
+                for r in cv_block["results"]:
+                    job = r["job"]
+    
+                    st.markdown(f"### {job['title']}")
+                    st.write(f"**Estimated Offer Probability:** {r['score']}%")
+    
+                    st.caption(
+                        f"""
+                        **Company:** {job['company_name']}  
+                        **Document pass rate:** {job['passrate_for_doc_screening']}  
+                        **Offer rate:** {job['documents_to_job_offer_ratio']}  
+                        **Fee:** {job['fee']}  
+                        **Job link:** {job['job_id']}
+                        """
+                    )
+    
+                    if st.button(
+                        f"Explain – {cv_block['cv_name']} – {job['title']}",
+                        key=f"explain_{cv_block['cv_name']}_{job['job_id']}"
+                    ):
+                        with st.spinner("Generating explanation..."):
+                            sections = generate_explanation(
+                                cv_block["cv_text"],  # ✅ correct CV
+                                job,
+                                r
+                            )
+    
+                            st.write(sections.get("SUMMARY", ""))
+    
+                            with st.expander("Evaluation details"):
+                                st.markdown("**Must-have requirements ○**")
+                                st.write(sections.get("MUST_HAVE", ""))
+    
+                                st.markdown("**Preferred requirements ×**")
+                                st.write(sections.get("PREFERRED", ""))
+    
+                                st.markdown("**Role alignment △**")
+                                st.write(sections.get("ALIGNMENT", ""))
+    
+                    st.divider()
 
 
-                    st.write(sections.get("SUMMARY", ""))
-
-                    with st.expander("Evaluation details"):
-                        st.markdown("**Must-have requirements ○**")
-                        st.write(sections.get("MUST_HAVE", ""))
-
-                        st.markdown("**Preferred requirements ×**")
-                        st.write(sections.get("PREFERRED", ""))
-
-                        st.markdown("**Role alignment △**")
-                        st.write(sections.get("ALIGNMENT", ""))
-
-            st.divider()
-
-        best = st.session_state.results[0]
-        st.success(
-            f"Best match: **{best['job']['title']}** ({best['score']}%)"
-        )
+        
         
             
 
