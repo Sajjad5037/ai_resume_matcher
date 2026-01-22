@@ -407,11 +407,16 @@ if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
     jobs = get_available_jobs(jobs_df)
 
     folder_results = []
+    
+    status = st.empty()
     progress = st.progress(0)
 
     for idx, uploaded_file in enumerate(st.session_state.cvs, start=1):
+        status.info(
+            f"Evaluating {uploaded_file.name} ({idx}/{len(st.session_state.cvs)})"
+        )
+
         cv_text = extract_cv_text_from_uploaded_file(uploaded_file)
-    
         if not cv_text.strip():
             continue
 
@@ -429,12 +434,13 @@ if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
         folder_results.append({
             "cv_name": uploaded_file.name,
             "cv_type": uploaded_file.name.split(".")[-1].upper(),
-
             "cv_text": cv_text,
             "results": cv_results
         })
 
         progress.progress(idx / len(st.session_state.cvs))
+    
+    status.success("Evaluation completed")
 
 
     st.session_state.results = folder_results
