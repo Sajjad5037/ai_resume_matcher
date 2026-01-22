@@ -120,22 +120,28 @@ def extract_text_from_excel(path: Path) -> str:
 def extract_cv_text_from_path(path: Path) -> str:
     suffix = path.suffix.lower()
 
-    if suffix in (".pdf", ".docx"):
-        with open(path, "rb") as f:
-            fake_upload = type(
-                "UploadedFile",
-                (),
-                {
-                    "type": (
-                        "application/pdf"
-                        if suffix == ".pdf"
-                        else "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-                    ),
-                    "read": f.read
-                }
-            )()
-            return extract_text(fake_upload)
+    # ✅ PDF
+    if suffix == ".pdf":
+        try:
+            reader = PdfReader(str(path))
+            text = []
+            for page in reader.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text.append(page_text)
+            return "\n".join(text)
+        except Exception:
+            return ""
 
+    # ✅ DOCX
+    if suffix == ".docx":
+        try:
+            doc = Document(str(path))
+            return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+        except Exception:
+            return ""
+
+    # ✅ XLSX
     if suffix == ".xlsx":
         return extract_text_from_excel(path)
 
