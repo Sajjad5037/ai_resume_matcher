@@ -40,15 +40,18 @@ st.set_page_config(
     layout="centered"
 )
 if "results" not in st.session_state:
-    st.session_state.results = None
+    st.session_state.results = []
+
 if "explanations" not in st.session_state:
     st.session_state.explanations = {}
+if "cvs" not in st.session_state:
+    st.session_state.cvs = None
 
-
+    
 st.success("Gemini API key loaded successfully.")
 
 
-st.title("AI Resume Matcher (hello)")
+st.title("AI Resume Matcher (new)")
 
 
 
@@ -408,130 +411,99 @@ Job description:
 # ----------------------------
 uploaded_zip = st.file_uploader(
     "Upload CV folder (ZIP containing PDF / DOCX / XLSX)",
-    type=["zip"]
+    type=["zip"],
+    key="cv_zip"
 )
+
 jobs_file = st.file_uploader(
     "Upload jobs Excel file",
     type=["xlsx"],
     key="jobs_excel"
 )
 
-if uploaded_zip:
-    # 🔑 CLEAR OLD RESULTS WHEN A NEW ZIP IS UPLOADED
-    st.session_state.results = None
 
+# 🔹 ADD THIS BLOCK HERE (exactly here)
+if uploaded_zip:
     st.success("CV folder uploaded")
 
-    cvs = extract_cvs_from_zip(uploaded_zip)
-    if not cvs:
+    if st.session_state.cvs is None:
+        st.session_state.cvs = extract_cvs_from_zip(uploaded_zip)
+
+    if not st.session_state.cvs:
         st.error("No PDF, DOCX, or XLSX files found in the ZIP.")
         st.stop()
 
-    st.info(f"{len(cvs)} CVs found in folder")
+    st.info(f"{len(st.session_state.cvs)} CVs found in folder")
 
-    if jobs_file and st.button("Evaluate CV Folder"):
-        jobs_df = pd.read_excel(jobs_file)
-        jobs = get_available_jobs(jobs_df)
+if uploaded_zip and jobs_file and st.button("Evaluate CV Folder"):
+    jobs_df = pd.read_excel(jobs_file)
+    jobs = get_available_jobs(jobs_df)
 
-        folder_results = []
-        progress = st.progress(0)
+    folder_results = []
+    progress = st.progress(0)
 
-        for idx, cv_path in enumerate(cvs, start=1):
-            cv_text = extract_cv_text_from_path(cv_path)
+    for idx, cv_path in enumerate(st.session_state.cvs, start=1):
 
-            if not cv_text.strip():
-                continue
+        cv_text = extract_cv_text_from_path(cv_path)
+        if not cv_text.strip():
+            continue
 
-            cv_results = []
-
-            for job in jobs:
-                result = ai_match_job(cv_text, job, SELECTED_MODEL)
-
-                cv_results.append({
-                    "job": job,
-                    "score": result["data"]["score"],
-                    "criteria": result["data"]["criteria"]
-                })
-
-            cv_results.sort(key=lambda x: x["score"], reverse=True)
-
-            folder_results.append({
-                "cv_name": cv_path.name,
-                "cv_type": cv_path.suffix.upper().replace(".", ""),
-                "cv_text": cv_text,
-                "results": cv_results
+        cv_results = []
+        for job in jobs:
+            result = ai_match_job(cv_text, job, SELECTED_MODEL)
+            cv_results.append({
+                "job": job,
+                "score": result["data"]["score"],
+                "criteria": result["data"]["criteria"]
             })
 
-            progress.progress(idx / len(cvs))
+        cv_results.sort(key=lambda x: x["score"], reverse=True)
 
-        st.session_state.results = folder_results
+        folder_results.append({
+            "cv_name": cv_path.name,
+            "cv_type": cv_path.suffix.upper().replace(".", ""),
+            "cv_text": cv_text,
+            "results": cv_results
+        })
 
-    # ✅ RENDERING = OUTSIDE BUTTON
-    if st.session_state.results:
-        st.subheader("CV Folder Evaluation Results")
-        for cv_block in st.session_state.results:
-            if not cv_block["results"]:
-                st.warning(f"No valid matches for {cv_block['cv_name']}")
-                continue
-        
-            best_job = cv_block["results"][0]
-        
-            st.success(
-                f"Best match for {cv_block['cv_name']}: "
-                f"**{best_job['job']['title']}** ({best_job['score']}%)"
-            )
+        progress.progress(idx / len(st.session_state.cvs))
 
-    
-        for cv_idx, cv_block in enumerate(st.session_state.results):
-            with st.expander(f"📄 {cv_block['cv_name']} ({cv_block['cv_type']})"):
-        
-                for job_idx, r in enumerate(cv_block["results"]):
-                    job = r["job"]
-        
-                    st.markdown(f"### {job['title']}")
-                    st.write(f"**Estimated Offer Probability:** {r['score']}%")
-        
-                    st.caption(
-                        f"""
-                        **Company:** {job['company_name']}  
-                        **Document pass rate:** {job['passrate_for_doc_screening']}  
-                        **Offer rate:** {job['documents_to_job_offer_ratio']}  
-                        **Fee:** {job['fee']}  
-                        **Job link:** {job['job_id']}
-                        """
+
+    st.session_state.results = folder_results
+if st.session_state.results:
+    st.subheader("CV Folder Evaluation Results")
+
+    for cv_idx, cv_block in enumerate(st.session_state.results):
+        if not cv_block["results"]:
+            continue
+
+        best_job = cv_block["results"][0]
+        st.success(
+            f"Best match for {cv_block['cv_name']}: "
+            f"**{best_job['job']['title']}** ({best_job['score']}%)"
+        )
+
+        with st.expander(f"📄 {cv_block['cv_name']} ({cv_block['cv_type']})"):
+            for job_idx, r in enumerate(cv_block["results"]):
+                job = r["job"]
+
+                st.markdown(f"### {job['title']}")
+                st.write(f"**Estimated Offer Probability:** {r['score']}%")
+
+                explain_key = f"{cv_idx}_{job_idx}"
+
+                if st.button(
+                    f"Explain – {cv_block['cv_name']} – {job['title']}",
+                    key=f"explain_btn_{explain_key}"
+                ):
+                    st.session_state.explanations[explain_key] = generate_explanation(
+                        cv_block["cv_text"], job, r
                     )
-        
-                    explain_key = f"{cv_idx}_{job_idx}"
-        
-                    # ✅ BUTTON: only stores explanation
-                    if st.button(
-                        f"Explain – {cv_block['cv_name']} – {job['title']}",
-                        key=f"explain_btn_{explain_key}"
-                    ):
-                        with st.spinner("Generating explanation..."):
-                            st.session_state.explanations[explain_key] = generate_explanation(
-                                cv_block["cv_text"],
-                                job,
-                                r
-                            )
-        
-                    # ✅ RENDER: survives reruns
-                    if explain_key in st.session_state.explanations:
-                        sections = st.session_state.explanations[explain_key]
-        
-                        st.write(sections.get("SUMMARY", ""))
-        
-                        with st.expander("Evaluation details"):
-                            st.markdown("**Must-have requirements ○**")
-                            st.write(sections.get("MUST_HAVE", ""))
-        
-                            st.markdown("**Preferred requirements ×**")
-                            st.write(sections.get("PREFERRED", ""))
-        
-                            st.markdown("**Role alignment △**")
-                            st.write(sections.get("ALIGNMENT", ""))
-        
-                    st.divider()
+
+                if explain_key in st.session_state.explanations:
+                    sections = st.session_state.explanations[explain_key]
+                    st.write(sections.get("SUMMARY", ""))
+
 
 
         
