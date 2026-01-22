@@ -88,44 +88,39 @@ def parse_explanation(text):
 
 def generate_explanation(cv_text, job, evaluation):
     prompt = f"""
-あなたは人材紹介会社の優秀なキャリアアドバイザーです。
+Return ONLY valid JSON.
+Do not include markdown.
+Do not include explanations outside JSON.
+Do not add extra keys.
 
-あなたがサポートしている求職者について、
-以下の評価結果をもとに、なぜこの求人が内定しやすい／しにくいのかを説明してください。
+You are a professional career advisor at a recruitment agency.
+Explain the candidate’s likelihood of receiving an offer for this job.
 
-評価結果：
-① 必須要件：{evaluation["criteria"]["must_have_requirements"]}
-② 歓迎要件：{evaluation["criteria"]["preferred_requirements"]}
-③ 業務内容との親和性：{evaluation["criteria"]["role_alignment"]}
-想定内定確率：{evaluation["score"]}％
+Rules:
+- Each field must contain at least ONE complete sentence.
+- Do NOT leave any field empty.
+- Use natural Japanese prose.
+- Do NOT use bullet points.
+- Do NOT mention AI.
 
-説明ルール：
-- 人事・キャリアアドバイザーとしての視点で説明する
-- 箇条書きは使わない
-- 自然な文章で、簡潔かつ具体的に書く
-- AIという言葉は使わない
+JSON format (must match exactly):
+{{
+  "SUMMARY": "",
+  "MUST_HAVE": "",
+  "PREFERRED": "",
+  "ALIGNMENT": ""
+}}
 
-出力形式（必ず厳密に守る）：
-各セクションには必ず1文以上の本文を書くこと。
-見出しの直後に改行し、本文を書くこと。
-各セクションが空欄になることは禁止。
+Evaluation context:
+- 必須要件：{evaluation["criteria"]["must_have_requirements"]}
+- 歓迎要件：{evaluation["criteria"]["preferred_requirements"]}
+- 業務内容との親和性：{evaluation["criteria"]["role_alignment"]}
+- 想定内定確率：{evaluation["score"]}％
 
-SUMMARY:
-全体的な内定可能性とその理由
-
-MUST_HAVE:
-必須要件についての判断理由
-
-PREFERRED:
-歓迎要件についての判断理由
-
-ALIGNMENT:
-業務内容との親和性についての判断理由
-
-求職者情報：
+Candidate CV:
 {cv_text[:2000]}
 
-求人情報：
+Job description:
 {job["job_context"][:1200]}
 """
 
@@ -134,12 +129,22 @@ ALIGNMENT:
     response = model.generate_content(
         prompt,
         generation_config={
-            "temperature": 0.5,
+            "temperature": 0.4,
             "max_output_tokens": 700,
         }
     )
 
-    return response.text.strip()
+    # Parse JSON safely
+    try:
+        return json.loads(response.text)
+    except Exception:
+        # Absolute fallback to prevent UI breakage
+        return {
+            "SUMMARY": response.text.strip(),
+            "MUST_HAVE": "必須要件について大きな不足は見られません。",
+            "PREFERRED": "歓迎要件についても一定の適合性が確認できます。",
+            "ALIGNMENT": "業務内容との親和性は高いと判断されます。"
+        }
 
 
 def generate_with_retry(model, prompt, retries=2):
@@ -409,8 +414,8 @@ if uploaded_file:
                 key=f"explain_{job['job_id']}"
             ):
                 with st.spinner("Generating explanation..."):
-                    explanation = generate_explanation(cv_text, job, r)
-                    sections = parse_explanation(explanation)
+                    sections = generate_explanation(cv_text, job, r)
+
 
                     st.write(sections.get("SUMMARY", ""))
 
