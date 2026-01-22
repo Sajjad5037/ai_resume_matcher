@@ -41,6 +41,8 @@ st.set_page_config(
 )
 if "results" not in st.session_state:
     st.session_state.results = None
+if "explanations" not in st.session_state:
+    st.session_state.explanations = {}
 
 
 st.success("Gemini API key loaded successfully.")
@@ -482,13 +484,13 @@ if uploaded_zip:
     
         for cv_idx, cv_block in enumerate(st.session_state.results):
             with st.expander(f"📄 {cv_block['cv_name']} ({cv_block['cv_type']})"):
+        
                 for job_idx, r in enumerate(cv_block["results"]):
-
                     job = r["job"]
-    
+        
                     st.markdown(f"### {job['title']}")
                     st.write(f"**Estimated Offer Probability:** {r['score']}%")
-    
+        
                     st.caption(
                         f"""
                         **Company:** {job['company_name']}  
@@ -498,31 +500,37 @@ if uploaded_zip:
                         **Job link:** {job['job_id']}
                         """
                     )
-    
+        
+                    explain_key = f"{cv_idx}_{job_idx}"
+        
+                    # ✅ BUTTON: only stores explanation
                     if st.button(
                         f"Explain – {cv_block['cv_name']} – {job['title']}",
-                        key=f"explain_{cv_idx}_{job_idx}"
-
+                        key=f"explain_btn_{explain_key}"
                     ):
                         with st.spinner("Generating explanation..."):
-                            sections = generate_explanation(
-                                cv_block["cv_text"],  # ✅ correct CV
+                            st.session_state.explanations[explain_key] = generate_explanation(
+                                cv_block["cv_text"],
                                 job,
                                 r
                             )
-    
-                            st.write(sections.get("SUMMARY", ""))
-    
-                            with st.expander("Evaluation details"):
-                                st.markdown("**Must-have requirements ○**")
-                                st.write(sections.get("MUST_HAVE", ""))
-    
-                                st.markdown("**Preferred requirements ×**")
-                                st.write(sections.get("PREFERRED", ""))
-    
-                                st.markdown("**Role alignment △**")
-                                st.write(sections.get("ALIGNMENT", ""))
-    
+        
+                    # ✅ RENDER: survives reruns
+                    if explain_key in st.session_state.explanations:
+                        sections = st.session_state.explanations[explain_key]
+        
+                        st.write(sections.get("SUMMARY", ""))
+        
+                        with st.expander("Evaluation details"):
+                            st.markdown("**Must-have requirements ○**")
+                            st.write(sections.get("MUST_HAVE", ""))
+        
+                            st.markdown("**Preferred requirements ×**")
+                            st.write(sections.get("PREFERRED", ""))
+        
+                            st.markdown("**Role alignment △**")
+                            st.write(sections.get("ALIGNMENT", ""))
+        
                     st.divider()
 
 
