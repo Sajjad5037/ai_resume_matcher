@@ -127,25 +127,52 @@ def extract_cv_text_from_uploaded_file(uploaded_file) -> str:
 
     return ""
 
+def aggregate_candidate_cv_text(uploaded_files):
+    combined_blocks = []
+    filenames = []
 
+    for file in uploaded_files:
+        text = extract_cv_text_from_uploaded_file(file)
+        if text.strip():
+            combined_blocks.append(f"\n\n--- {file.name} ---\n{text}")
+            filenames.append(file.name)
+
+    return {
+        "cv_text": "\n".join(combined_blocks),
+        "filenames": filenames
+    }
 def generate_explanation(cv_text, job, evaluation):
     prompt = f"""
 Return ONLY valid JSON.
 Do not include markdown.
-Do not include explanations outside JSON.
+Do not include any text outside JSON.
 Do not add extra keys.
 
-You are a professional career advisor at a recruitment agency.
-Explain the candidate’s likelihood of receiving an offer for this job.
+あなたは、採用・書類選考の実務経験が豊富な人材アドバイザーです。
+以下の評価結果および履歴書（CV）の記載内容のみを根拠として、
+当該職種における候補者の内定可能性について、採用担当者向けに
+客観的かつ丁寧な評価コメントを作成してください。
 
-Rules:
-- Each field must contain at least ONE complete sentence.
-- Do NOT leave any field empty.
-- Use natural Japanese prose.
-- Do NOT use bullet points.
-- Do NOT mention AI.
+【必須ルール】
+- 出力はすべて日本語で記述してください。
+- 自然で客観的なビジネス日本語を使用してください。
+- 箇条書きは使用せず、文章形式で記述してください。
+- AI、モデル、システムに関する言及は禁止です。
+- 各フィールドは必ず1文以上の完全な文章で記述してください。
+- 内容が不明な場合でも、空欄にはせず、評価文として成立させてください。
 
-JSON format (must match exactly):
+【評価の前提】
+- 評価は、提供されたCVに明示的に記載されている内容のみを根拠としてください。
+- 不足や未経験を断定せず、間接的・汎用的な経験が確認できる場合は前向きに言及してください。
+- 各評価は、採用担当者が社内共有できる説明として成立する内容にしてください。
+
+【評価コンテキスト】
+- 必須要件の評価：{evaluation["criteria"]["must_have_requirements"]}
+- 歓迎要件の評価：{evaluation["criteria"]["preferred_requirements"]}
+- 職務内容との適合性：{evaluation["criteria"]["role_alignment"]}
+- 想定内定確率：{evaluation["score"]}％
+
+【出力JSON形式（厳守）】
 {{
   "SUMMARY": "",
   "MUST_HAVE": "",
@@ -153,16 +180,10 @@ JSON format (must match exactly):
   "ALIGNMENT": ""
 }}
 
-Evaluation context:
-- 必須要件：{evaluation["criteria"]["must_have_requirements"]}
-- 歓迎要件：{evaluation["criteria"]["preferred_requirements"]}
-- 業務内容との親和性：{evaluation["criteria"]["role_alignment"]}
-- 想定内定確率：{evaluation["score"]}％
-
-Candidate CV:
+【候補者の履歴書（CV）】
 {cv_text[:2000]}
 
-Job description:
+【職務内容】
 {job["job_context"][:1200]}
 """
 
@@ -326,14 +347,29 @@ def ai_match_job(cv_text, job, model_name):
 
     prompt = f"""
 Return ONLY valid JSON.
-No markdown. No explanations.
+No markdown.
+No explanations.
+No text outside JSON.
+
 All string values MUST be single-line.
 Do NOT include newline characters inside strings.
 
-Do NOT include explanations or reasons.
-Only output numeric score and ratings.
+あなたは、書類選考を担当する採用実務者です。
+以下の履歴書（CV）と職務内容を比較し、
+CVに明示的に記載されている内容のみを根拠として評価してください。
 
-JSON format:
+【重要ルール】
+- 推測や補完は禁止です。
+- 間接的・汎用的な関連経験が確認できる場合は「△」としてください。
+- 関連する根拠がCV上に一切確認できない場合のみ「×」としてください。
+- 不足や未経験を断定してはいけません。
+
+【評価記号】
+○：直接的かつ職務関連性の高い経験が確認できる  
+△：間接的・汎用的・限定的な関連経験が確認できる  
+×：関連する経験や根拠が一切確認できない  
+
+【出力JSON形式（厳守）】
 {{
   "score": 0,
   "criteria": {{
@@ -343,10 +379,10 @@ JSON format:
   }}
 }}
 
-Candidate CV:
+【候補者の履歴書（CV）】
 {cv_text[:3000]}
 
-Job description:
+【職務内容】
 {job["job_context"][:1500]}
 """
 
@@ -415,45 +451,48 @@ if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
     status = st.empty()
     progress = st.progress(0)
 
-    for idx, uploaded_file in enumerate(st.session_state.cvs, start=1):
-        status.info(
-            f"Evaluating {uploaded_file.name} ({idx}/{len(st.session_state.cvs)})"
-        )
-
-        cv_text = extract_cv_text_from_uploaded_file(uploaded_file)
-        if not cv_text.strip():
-            continue
-
-        cv_results = []
-        for job_idx, job in enumerate(jobs, start=1):
-            status.info(
-                f"Evaluating {uploaded_file.name} "
-                f"({idx}/{len(st.session_state.cvs)}) – "
-                f"Job {job_idx}/{len(jobs)}"
-            )
-        
-            result = ai_match_job(cv_text, job, SELECTED_MODEL)    
-            cv_results.append({
-                "job": job,
-                "score": result["data"]["score"],
-                "criteria": result["data"]["criteria"]
-            })
-
-        cv_results.sort(key=lambda x: x["score"], reverse=True)
-
-        folder_results.append({
-            "cv_name": uploaded_file.name,
-            "cv_type": uploaded_file.name.split(".")[-1].upper(),
-            "cv_text": cv_text,
-            "results": cv_results
+    # 🔹 Aggregate ALL CVs into ONE candidate
+    candidate = aggregate_candidate_cv_text(st.session_state.cvs)
+    
+    cv_text = candidate["cv_text"]
+    cv_files = candidate["filenames"]
+    
+    if not cv_text.strip():
+        st.error("No valid text found in uploaded CVs.")
+        st.stop()
+    
+    status.info("Evaluating candidate profile (combined documents)")
+    
+    cv_results = []
+    
+    for job_idx, job in enumerate(jobs, start=1):
+        status.info(f"Evaluating Job {job_idx}/{len(jobs)}")
+    
+        result = ai_match_job(cv_text, job, SELECTED_MODEL)
+    
+        cv_results.append({
+            "job": job,
+            "score": result["data"]["score"],
+            "criteria": result["data"]["criteria"]
         })
-
-        progress.progress(idx / len(st.session_state.cvs))
+    
+    cv_results.sort(key=lambda x: x["score"], reverse=True)
+    
+    st.session_state.results = [{
+        "cv_name": "Combined Candidate Profile",
+        "cv_type": "MULTI-DOC",
+        "cv_files": cv_files,
+        "cv_text": cv_text,
+        "results": cv_results
+    }]
     
     status.success("Evaluation completed")
+    progress.progress(1.0)
 
+    
+    
 
-    st.session_state.results = folder_results
+    
 if st.session_state.results:
     st.subheader("CV Evaluation Results")
 
@@ -469,12 +508,33 @@ if st.session_state.results:
         )
 
         with st.expander(f"📄 {cv_block['cv_name']} ({cv_block['cv_type']})"):
+            st.markdown("**Uploaded Documents:**")
+            for name in cv_block.get("cv_files", []):
+                st.markdown(f"- {name}")
+
             for job_idx, r in enumerate(cv_block["results"]):
                 job = r["job"]
 
                 st.markdown(f"### {job['title']}")
                 st.write(f"**Estimated Offer Probability:** {r['score']}%")
-
+                # --- Job metadata (restored) ---
+                cols = st.columns(3)
+                
+                cols[0].markdown(
+                    f"**Company**<br>{job['company_name']}",
+                    unsafe_allow_html=True
+                )
+                
+                cols[1].markdown(
+                    f"**Doc Pass Rate**<br>{job['passrate_for_doc_screening']}%",
+                    unsafe_allow_html=True
+                )
+                
+                cols[2].markdown(
+                    f"**Offer Rate**<br>{job['documents_to_job_offer_ratio']}",
+                    unsafe_allow_html=True
+                )
+                
                 explain_key = f"{cv_idx}_{job_idx}"
 
                 # --- init open state ---
