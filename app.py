@@ -92,6 +92,7 @@ def safe_parse_json(text):
 
 
 def extract_cv_text_from_uploaded_file(uploaded_file) -> str:
+    uploaded_file.seek(0)
     file_type = uploaded_file.type
 
     # PDF
