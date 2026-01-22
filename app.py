@@ -507,7 +507,14 @@ if st.session_state.results:
             f"**{best_job['job']['title']}** ({best_job['score']}%)"
         )
 
-        with st.expander(f"📄 {cv_block['cv_name']} ({cv_block['cv_type']})"):
+        with st.expander(
+            f"📄 {cv_block['cv_name']} ({cv_block['cv_type']})",
+            expanded=any(
+                st.session_state.explain_open.get(f"{cv_idx}_{i}", False)
+                for i in range(len(cv_block["results"]))
+            )
+        ):
+
             st.markdown("**Uploaded Documents:**")
             for name in cv_block.get("cv_files", []):
                 st.markdown(f"- {name}")
