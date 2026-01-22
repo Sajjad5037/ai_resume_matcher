@@ -144,6 +144,8 @@ def aggregate_candidate_cv_text(uploaded_files):
         "filenames": filenames
     }
 def generate_explanation(cv_text, job, evaluation):
+    score = evaluation["score"]
+
     prompt = f"""
 Return ONLY valid JSON.
 Do not include markdown.
@@ -163,16 +165,21 @@ Do not add extra keys.
 - 各フィールドは必ず1文以上の完全な文章で記述してください。
 - 内容が不明な場合でも、空欄にはせず、評価文として成立させてください。
 
+【重要整合ルール（厳守）】
+- 想定内定確率が30％未満の場合、評価は慎重または否定的なトーンで記述してください。
+- 想定内定確率が0％の場合、現時点で内定に至る可能性が低いことを明確に示してください。
+- 評価サマリーの内容と想定内定確率は、必ず論理的に一致させてください。
+
 【評価の前提】
 - 評価は、提供されたCVに明示的に記載されている内容のみを根拠としてください。
-- 不足や未経験を断定せず、間接的・汎用的な経験が確認できる場合は前向きに言及してください。
+- 推測や補完は行わないでください。
 - 各評価は、採用担当者が社内共有できる説明として成立する内容にしてください。
 
 【評価コンテキスト】
 - 必須要件の評価：{evaluation["criteria"]["must_have_requirements"]}
 - 歓迎要件の評価：{evaluation["criteria"]["preferred_requirements"]}
 - 職務内容との適合性：{evaluation["criteria"]["role_alignment"]}
-- 想定内定確率：{evaluation["score"]}％
+- 想定内定確率：{score}％
 
 【出力JSON形式（厳守）】
 {{
@@ -194,20 +201,29 @@ Do not add extra keys.
     response = model.generate_content(
         prompt,
         generation_config={
-            "temperature": 0.4,
+            "temperature": 0.3,
             "max_output_tokens": 900,
         }
     )
 
-    # Parse JSON safely
     try:
         return safe_parse_json(response.text)
+
     except Exception:
+        # 🔒 Hard safety fallback – NEVER leak raw model text
+        if score == 0:
+            return {
+                "SUMMARY": "提供された履歴書の内容からは、当該職種において内定に至る可能性は現時点では低いと判断されます。",
+                "MUST_HAVE": "必須要件に該当する明確な経験や根拠が履歴書上で確認できませんでした。",
+                "PREFERRED": "歓迎要件についても、直接的な適合性は限定的であると考えられます。",
+                "ALIGNMENT": "職務内容との直接的な一致は確認できず、業務適合性は低いと判断されます。"
+            }
+
         return {
-            "SUMMARY": response.text.strip(),
-            "MUST_HAVE": "必須要件について概ね満たしていると判断されます。",
-            "PREFERRED": "歓迎要件についても一定の適合性が確認できます。",
-            "ALIGNMENT": "業務内容との親和性は高いと考えられます。"
+            "SUMMARY": "履歴書の内容を総合的に判断すると、一部に評価可能な要素はあるものの、内定可能性は限定的であると考えられます。",
+            "MUST_HAVE": "必須要件については一部満たしている可能性はあるものの、十分な根拠は確認できませんでした。",
+            "PREFERRED": "歓迎要件については限定的な適合性が確認できます。",
+            "ALIGNMENT": "業務内容との親和性は一定程度確認できますが、決定的とは言えません。"
         }
 
 
