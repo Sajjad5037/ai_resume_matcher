@@ -10,6 +10,16 @@ import re
 import google.generativeai as genai
 import mimetypes
 
+def get_display_score(score: int, seniority: str) -> int:
+    """
+    UI-safe score display.
+    Does NOT affect AI logic.
+    """
+    if seniority == "ENTRY":
+        return max(score, 25)
+    return score
+
+
 def detect_seniority(job_context: str) -> str:
     keywords_entry = ["未経験OK", "経験不問", "育成", "第二新卒"]
     keywords_senior = ["3年以上", "5年以上", "リード", "マネージャー"]
@@ -736,7 +746,13 @@ if st.session_state.results:
                 job = r["job"]
         
                 st.markdown(f"### {job['title']}")
-                st.write(f"**Estimated Offer Probability:** {r['score']}%")
+                display_score = get_display_score(
+                    r["score"],
+                    job["seniority"]
+                )
+                
+                st.write(f"**Estimated Offer Probability:** {display_score}%")
+
         
                 cols = st.columns(3)
                 cols[0].markdown(f"**会社名**<br>{job['company_name']}", unsafe_allow_html=True)
