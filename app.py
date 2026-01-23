@@ -87,35 +87,50 @@ SELECTED_MODEL = MODEL_OPTIONS[selected_model_label]
 st.caption(f"Using model: `{SELECTED_MODEL}`")
 
 st.write("Upload a candidate CV to see which jobs are most likely to result in an offer.")
-
-def safe_parse_json(text):
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        raise ValueError("No valid JSON found")
-    return json.loads(text[start:end + 1])
+st.write(
+    "📌 For best accuracy, upload CVs in DOCX or text-based PDF format. "
+    "Scanned PDFs may reduce matching quality."
+)
 
 
 def extract_cv_text_from_uploaded_file(uploaded_file) -> str:
     uploaded_file.seek(0)
     file_type = uploaded_file.type
 
-    # PDF
+    # ----------------
+    # PDF (SAFE)
+    # ----------------
     if file_type == "application/pdf":
         reader = PdfReader(uploaded_file)
         text = []
+        failed_pages = 0
+
         for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text.append(page_text)
+            try:
+                page_text = page.extract_text()
+                if page_text and page_text.strip():
+                    text.append(page_text)
+            except Exception:
+                failed_pages += 1
+                continue
+
+        if failed_pages > 0:
+            st.warning(
+                f"⚠️ {uploaded_file.name}: {failed_pages} page(s) could not be read and were skipped."
+            )
+
         return "\n".join(text)
 
+    # ----------------
     # DOCX
+    # ----------------
     if file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
         doc = Document(io.BytesIO(uploaded_file.read()))
         return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
 
+    # ----------------
     # XLSX
+    # ----------------
     if file_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
         df_dict = pd.read_excel(uploaded_file, sheet_name=None)
         blocks = []
@@ -129,20 +144,40 @@ def extract_cv_text_from_uploaded_file(uploaded_file) -> str:
 
     return ""
 
+
+def safe_parse_json(text):
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("No valid JSON found")
+    return json.loads(text[start:end + 1])
+
+
+
 def aggregate_candidate_cv_text(uploaded_files):
     combined_blocks = []
     filenames = []
 
     for file in uploaded_files:
-        text = extract_cv_text_from_uploaded_file(file)
+        try:
+            text = extract_cv_text_from_uploaded_file(file)
+        except Exception:
+            st.error(f"❌ Failed to process {file.name}")
+            continue
+
         if text.strip():
             combined_blocks.append(f"\n\n--- {file.name} ---\n{text}")
             filenames.append(file.name)
+        else:
+            st.info(
+                f"ℹ️ {file.name} contains little or no readable text."
+            )
 
     return {
         "cv_text": "\n".join(combined_blocks),
         "filenames": filenames
     }
+
 def generate_explanation(cv_text, job, evaluation):
     score = evaluation["score"]
 
@@ -474,6 +509,23 @@ if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
     if not cv_text.strip():
         st.error("No valid text found in uploaded CVs.")
         st.stop()
+    # ----------------------------
+    # Extraction quality check
+    # ----------------------------
+    char_count = len(cv_text)
+    
+    if char_count < 500:
+        st.warning(
+            "⚠️ Very little text could be extracted from the uploaded CVs. "
+            "Results may be less accurate. "
+            "For best results, please use DOCX or text-based PDF files."
+        )
+    elif char_count < 1500:
+        st.info(
+            "ℹ️ Some CV content could not be fully read. "
+            "Results are based on the extracted text only."
+        )
+
     
     status.info("Evaluating candidate profile (combined documents)")
     
