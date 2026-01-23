@@ -8,6 +8,26 @@ import json
 #from openai import OpenAI
 import re
 import google.generativeai as genai
+import mimetypes
+
+def to_gemini_part(uploaded_file):
+    uploaded_file.seek(0)
+
+    # Guess MIME type from filename (more reliable than browser)
+    mime_type, _ = mimetypes.guess_type(uploaded_file.name)
+
+    # Hard fallback for PDFs
+    if uploaded_file.name.lower().endswith(".pdf"):
+        mime_type = "application/pdf"
+
+    # Final fallback (should almost never be used)
+    if not mime_type:
+        mime_type = uploaded_file.type
+
+    return {
+        "mime_type": mime_type,
+        "data": uploaded_file.read(),
+    }
 
 
 
@@ -56,7 +76,7 @@ if "active_candidate" not in st.session_state:
 st.success("Gemini API key loaded successfully.")
 
 
-st.title("AI Resume Matcher (new)")
+st.title("AI Resume Matcher (old)")
 
 
 
@@ -263,12 +283,6 @@ Do not add extra keys.
             "PREFERRED": "歓迎要件については限定的な適合性が確認できます。",
             "ALIGNMENT": "業務内容との親和性は一定程度確認できますが、決定的とは言えません。"
         }
-def to_gemini_part(uploaded_file):
-    uploaded_file.seek(0)
-    return {
-        "mime_type": uploaded_file.type,
-        "data": uploaded_file.read(),
-    }
 
 
 def generate_with_retry(model, prompt, candidate_files, retries=1):
@@ -447,8 +461,29 @@ CVに明示的に記載されている内容のみを根拠として評価して
        )
 
         
+        # Log candidate count and content parts
+        if not response.candidates:
+            raise ValueError("Gemini returned no candidates")
+        
+        content_parts = response.candidates[0].content.parts
+        
+        st.caption(
+            f"🧠 Gemini response parts: {len(content_parts)} "
+            f"(includes prompt + {len(candidate_files)} document(s))"
+        )
+        
         raw = response.text
         parsed = extract_json(raw)
+        # 🔍 Heuristic warning: likely ingestion / readability issue
+        if (
+            parsed.get("score", 0) == 0 and
+            all(v == "×" for v in parsed.get("criteria", {}).values())
+        ):
+            st.warning(
+                "⚠️ The evaluation returned no matching signals. "
+                "This may indicate the CV content was not fully readable by the model."
+            )
+
 
 
         return {
@@ -512,7 +547,25 @@ if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
     progress = st.progress(0)
 
     # 🔹 Aggregate ALL CVs into ONE candidate
-    candidate_files = [to_gemini_part(f) for f in st.session_state.cvs]
+    candidate_files = []
+
+    st.subheader("📎 Document ingestion log")
+    
+    for f in st.session_state.cvs:
+        part = to_gemini_part(f)
+    
+        candidate_files.append(part)
+    
+        # UI log (very important for debugging)
+        st.code(
+            {
+                "filename": f.name,
+                "detected_mime_type": part["mime_type"],
+                "file_size_kb": round(len(part["data"]) / 1024, 2),
+            },
+            language="json"
+        )
+
 
     cv_files = [f.name for f in st.session_state.cvs]
     st.session_state.candidate_files = candidate_files
