@@ -178,7 +178,9 @@ def aggregate_candidate_cv_text(uploaded_files):
         "filenames": filenames
     }
 
-def generate_explanation(cv_text, job, evaluation):
+def generate_explanation(job, evaluation):
+
+
     score = evaluation["score"]
 
     # Create a prompt based on client requirements
@@ -189,7 +191,13 @@ Do not include any text outside JSON.
 Do not add extra keys.
 
 あなたは、採用・書類選考の実務経験が豊富な人材アドバイザーです。
-以下の評価結果および履歴書（CV）の記載内容のみを根拠として、
+以下の「評価結果」のみを根拠として、
+その判断理由を採用担当者向けに説明してください。
+
+※ あなたは履歴書を再評価してはいけません。
+※ 新しい判断や推測を行ってはいけません。
+※ 下記の評価結果を説明・言語化することだけが目的です。
+
 当該職種における候補者の内定可能性について、採用担当者向けに
 客観的かつ丁寧な評価コメントを作成してください。
 
@@ -220,8 +228,6 @@ Do not add extra keys.
   "ALIGNMENT": ""
 }}
 
-【候補者の履歴書（CV）】
-{cv_text[:2000]}
 
 【職務内容】
 {job["job_context"][:1200]}
@@ -236,6 +242,7 @@ Do not add extra keys.
             "max_output_tokens": 900,
         }
     )
+
 
     try:
         return safe_parse_json(response.text)
@@ -256,42 +263,33 @@ Do not add extra keys.
             "PREFERRED": "歓迎要件については限定的な適合性が確認できます。",
             "ALIGNMENT": "業務内容との親和性は一定程度確認できますが、決定的とは言えません。"
         }
+def to_gemini_part(uploaded_file):
+    uploaded_file.seek(0)
+    return {
+        "mime_type": uploaded_file.type,
+        "data": uploaded_file.read(),
+    }
 
 
-def generate_with_retry(model, prompt, retries=1):
+def generate_with_retry(model, prompt, candidate_files, retries=1):
     last_error = None
 
     for attempt in range(1, retries + 1):
-        
-
         response = model.generate_content(
-            prompt,
+            prompt,  # ✅ now defined via parameter
             generation_config={
-                "temperature": 0.1,
-                "max_output_tokens": 1024,
-            },
-            safety_settings={
-                "HARASSMENT": "BLOCK_NONE",
-                "HATE": "BLOCK_NONE",
-                "SEXUAL": "BLOCK_NONE",
-                "DANGEROUS": "BLOCK_NONE",
+                "temperature": 0.3,
+                "max_output_tokens": 900,
             }
         )
 
-        
         candidate = response.candidates[0]
-
-        
         raw = candidate.content.parts[0].text
 
-        
-        # ---- JSON PARSE ----
         try:
             parsed = extract_json(raw)
-            
             return parsed, raw
         except Exception as e:
-            
             last_error = e
 
     raise ValueError(f"Failed after retries: {last_error}")
@@ -389,7 +387,8 @@ def get_available_jobs(df: pd.DataFrame):
     return jobs
 
 
-def ai_match_job(cv_text, job, model_name):
+def ai_match_job(candidate_files, job, model_name):
+
     """
     Gemini 2.5 Flash – minimal, deterministic JSON version
     """
@@ -406,6 +405,7 @@ Do NOT include newline characters inside strings.
 あなたは、書類選考を担当する採用実務者です。
 以下の履歴書（CV）と職務内容を比較し、
 CVに明示的に記載されている内容のみを根拠として評価してください。
+
 
 【重要ルール】
 - 推測や補完は禁止です。
@@ -428,8 +428,8 @@ CVに明示的に記載されている内容のみを根拠として評価して
   }}
 }}
 
-【候補者の履歴書（CV）】
-{cv_text[:3000]}
+以下の履歴書（CV）ファイルと職務内容を比較し、
+CVに明示的に記載されている内容のみを根拠として評価してください。
 
 【職務内容】
 {job["job_context"][:1500]}
@@ -438,7 +438,18 @@ CVに明示的に記載されている内容のみを根拠として評価して
     try:
         model = genai.GenerativeModel(model_name)
 
-        parsed, raw = generate_with_retry(model, prompt)
+        response = model.generate_content(
+           [prompt, *candidate_files],
+           generation_config={
+               "temperature": 0.3,
+               "max_output_tokens": 900,
+           }
+       )
+
+        
+        raw = response.text
+        parsed = extract_json(raw)
+
 
         return {
             "ok": True,
@@ -501,30 +512,11 @@ if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
     progress = st.progress(0)
 
     # 🔹 Aggregate ALL CVs into ONE candidate
-    candidate = aggregate_candidate_cv_text(st.session_state.cvs)
-    
-    cv_text = candidate["cv_text"]
-    cv_files = candidate["filenames"]
-    
-    if not cv_text.strip():
-        st.error("No valid text found in uploaded CVs.")
-        st.stop()
-    # ----------------------------
-    # Extraction quality check
-    # ----------------------------
-    char_count = len(cv_text)
-    
-    if char_count < 500:
-        st.warning(
-            "⚠️ Very little text could be extracted from the uploaded CVs. "
-            "Results may be less accurate. "
-            "For best results, please use DOCX or text-based PDF files."
-        )
-    elif char_count < 1500:
-        st.info(
-            "ℹ️ Some CV content could not be fully read. "
-            "Results are based on the extracted text only."
-        )
+    candidate_files = [to_gemini_part(f) for f in st.session_state.cvs]
+
+    cv_files = [f.name for f in st.session_state.cvs]
+    st.session_state.candidate_files = candidate_files
+
 
     
     status.info("Evaluating candidate profile (combined documents)")
@@ -534,7 +526,8 @@ if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
     for job_idx, job in enumerate(jobs, start=1):
         status.info(f"Evaluating Job {job_idx}/{len(jobs)}")
     
-        result = ai_match_job(cv_text, job, SELECTED_MODEL)
+        result = ai_match_job(candidate_files, job, SELECTED_MODEL)
+
     
         cv_results.append({
             "job": job,
@@ -548,7 +541,6 @@ if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
         "cv_name": "Combined Candidate Profile",
         "cv_type": "MULTI-DOC",
         "cv_files": cv_files,
-        "cv_text": cv_text,
         "results": cv_results
     }]
     
@@ -612,9 +604,8 @@ if st.session_state.results:
                 ):
                     st.session_state.explain_open[explain_key] = True
                     if explain_key not in st.session_state.explanations:
-                        st.session_state.explanations[explain_key] = generate_explanation(
-                            cv_block["cv_text"], job, r
-                        )
+                        st.session_state.explanations[explain_key] = generate_explanation(job, r)
+
         
                 if st.session_state.explain_open.get(explain_key, False):
                     sections = st.session_state.explanations.get(explain_key)
