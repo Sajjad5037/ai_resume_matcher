@@ -10,6 +10,20 @@ import re
 import google.generativeai as genai
 import mimetypes
 
+def detect_seniority(job_context: str) -> str:
+    keywords_entry = ["未経験OK", "経験不問", "育成", "第二新卒"]
+    keywords_senior = ["3年以上", "5年以上", "リード", "マネージャー"]
+
+    for k in keywords_entry:
+        if k in job_context:
+            return "ENTRY"
+
+    for k in keywords_senior:
+        if k in job_context:
+            return "SENIOR"
+
+    return "MID"
+
 def to_gemini_part(uploaded_file):
     uploaded_file.seek(0)
 
@@ -74,7 +88,7 @@ if "active_candidate" not in st.session_state:
 st.success("Gemini API key loaded successfully.")
 
 
-st.title("AI Resume Matcher (old)")
+st.title("AI Resume Matcher (new)")
 
 
 
@@ -208,6 +222,14 @@ Do not include markdown.
 Do not include any text outside JSON.
 Do not add extra keys.
 
+【職種レベル】
+この求人は「{job['seniority']} レベル」の募集です。
+
+【スコアの前提】
+- 想定内定確率は、書類選考時点での可能性を示す目安です。
+- ENTRY レベルの求人においては、
+  経験不足＝不適合を意味するものではありません。
+
 あなたは、採用・書類選考の実務経験が豊富な人材アドバイザーです。
 以下の「評価結果」のみを根拠として、
 その判断理由を採用担当者向けに説明してください。
@@ -216,27 +238,27 @@ Do not add extra keys.
 ※ 新しい判断や推測を行ってはいけません。
 ※ 下記の評価結果を説明・言語化することだけが目的です。
 
-当該職種における候補者の内定可能性について、採用担当者向けに
-客観的かつ丁寧な評価コメントを作成してください。
-
-【必須ルール】
-- 出力はすべて日本語で記述してください。
-- 自然で客観的なビジネス日本語を使用してください。
-- 箇条書きは使用せず、文章形式で記述してください。
-- AI、モデル、システムに関する言及は禁止です。
-- 各フィールドは必ず1文以上の完全な文章で記述してください。
-- 内容が不明な場合でも、空欄にはせず、評価文として成立させてください。
-
-【評価の前提】
-- 評価は、提供されたCVに明示的に記載されている内容のみを根拠としてください。
-- 推測や補完は行わないでください。
-- 各評価は、採用担当者が社内共有できる説明として成立する内容にしてください。
+当該職種における候補者の内定可能性について、
+「なぜこのスコアになったのか」を採用担当者が理解できるよう、
+背景と判断理由を客観的かつ丁寧に説明してください。
 
 【評価コンテキスト】
 - 必須要件の評価：{evaluation["criteria"]["must_have_requirements"]}
 - 歓迎要件の評価：{evaluation["criteria"]["preferred_requirements"]}
 - 職務内容との適合性：{evaluation["criteria"]["role_alignment"]}
 - 想定内定確率：{score}％
+
+⬇️⬇️⬇️ ここに追加 ⬇️⬇️⬇️
+
+【表現上の注意】
+- 想定内定確率が 30〜60％の場合：
+  一定の可能性があることを前提とした表現を使用してください。
+- 想定内定確率が 60％以上の場合：
+  前向きな適合要素を中心に記述してください。
+- 想定内定確率が 20％未満の場合のみ：
+  課題や不足点を明確に指摘してください。
+
+⬆️⬆️⬆️ ここまで ⬆️⬆️⬆️
 
 【出力JSON形式（厳守）】
 {{
@@ -245,7 +267,6 @@ Do not add extra keys.
   "PREFERRED": "",
   "ALIGNMENT": ""
 }}
-
 
 【職務内容】
 {job["job_context"][:1200]}
@@ -385,11 +406,13 @@ def get_available_jobs(df: pd.DataFrame):
         job_context = "\n".join(
             part for part in job_context_parts if part.split(": ", 1)[1]
         )
-
+        seniority = detect_seniority(job_context)
+ 
         jobs.append({
             "job_id": safe(row.get("job_url")),
             "title": title,
             "job_context": job_context,
+            "seniority": seniority,
             "company_name": safe(row.get("company_name")),
             "passrate_for_doc_screening": safe(row.get("passrate_for_doc_screening")),
             "documents_to_job_offer_ratio": safe(row.get("documents_to_job_offer_ratio")),
@@ -397,6 +420,31 @@ def get_available_jobs(df: pd.DataFrame):
         })
 
     return jobs
+def calculate_score(criteria: dict, seniority: str) -> int:
+    weights = {
+        "○": 1.0,
+        "△": 0.6,
+        "×": 0.0,
+    }
+
+    raw = (
+        weights.get(criteria.get("must_have_requirements"), 0) * 0.4 +
+        weights.get(criteria.get("preferred_requirements"), 0) * 0.3 +
+        weights.get(criteria.get("role_alignment"), 0) * 0.3
+    )
+
+    score = int(raw * 100)
+
+    # 🎯 Seniority-based soft floors
+    if seniority == "ENTRY":
+        score = max(score, 35)
+    elif seniority == "MID":
+        score = max(score, 20)
+    elif seniority == "SENIOR":
+        score = max(score, 10)
+
+    return min(score, 100)
+    
 
 
 def ai_match_job(candidate_files, job, model_name):
@@ -417,24 +465,33 @@ Do NOT include newline characters inside strings.
 以下の履歴書（CV）と職務内容を比較し、
 CVに明示的に記載されている内容のみを根拠として評価してください。
 
-【基本原則】
-- 評価は、CVに明示的に記載されている内容のみを根拠としてください。
-- 推測、補完、過度な解釈は禁止です。
-- 不足や未経験を断定してはいけません。
+【職種レベル】
+この求人は「{job['seniority']} レベル」に分類されます。
 
-【重要ルール】
-- 直接的かつ職務関連性の高い経験が確認できる場合は「○」としてください。
+【レベル別評価方針】
+- ENTRY の場合：
+  実務経験の欠如はマイナス評価にしてはいけません。
+  学習や育成によって補完可能な要素は「△」として前向きに評価してください。
+- MID / SENIOR の場合：
+  職務に直接関連する実務経験の有無をより重視してください。
+
+【評価の基本方針】
+- 評価は、CVに明示的に記載されている事実のみを根拠としてください。
+- 推測、補完、過度な解釈は禁止です。
+- 未記載の内容について、断定的な否定を行ってはいけません。
+
+【評価ルール】
+- 職務に直接関連する明確な経験が確認できる場合は「○」としてください。
 - 間接的・汎用的・限定的な関連経験が確認できる場合は「△」としてください。
 - CV上に関連する根拠が一切確認できない場合のみ「×」としてください。
 
-【重要な補足ルール】
-- 求人に「未経験OK」「経験不問」「育成前提」などの記載がある場合、
+【重要な補足ルール（必ず遵守）】
+- ENTRY レベルの求人においては、
   必須要件における直接経験の欠如をマイナス評価として扱ってはいけません。
-- 年齢、キャリア初期段階、ポテンシャルを前提とした職種である可能性を考慮してください。
 - 明確な不一致が確認できない限り、
   職務内容との適合性を「低い（×）」と断定してはいけません。
 
-【評価記号】
+【評価記号の定義】
 ○：直接的かつ職務関連性の高い経験が確認できる  
 △：間接的・汎用的・限定的な関連経験、または育成前提で評価可能  
 ×：関連する経験や根拠が一切確認できない  
@@ -451,9 +508,10 @@ CVに明示的に記載されている内容のみを根拠として評価して
 
 【スコア算出ルール】
 - score は 0 から 100 の整数で返してください。
-- 上記 criteria の評価結果を総合して score を算出してください。
-- 未経験可・育成前提の求人においては、
-  「△」評価が多い場合でも極端に低い score を返してはいけません。
+- criteria の評価結果を総合して score を算出してください。
+- ENTRY レベルの求人においては、
+  「△」が多い場合でも score を極端に低く設定してはいけません。
+- 明確な不一致（×）が複数確認される場合のみ、低スコアを検討してください。
 
 【職務内容】
 {job["job_context"][:1500]}
@@ -488,11 +546,13 @@ CVに明示的に記載されている内容のみを根拠として評価して
         raw = response.text
         parsed = extract_json(raw)
         
-        # Defensive normalization
-        try:
-            parsed["score"] = int(parsed.get("score", 0))
-        except (ValueError, TypeError):
-            parsed["score"] = 0
+        criteria = parsed.get("criteria", {})
+
+        parsed["score"] = calculate_score(
+            criteria=criteria,
+            seniority=job["seniority"]
+        )
+
 
         # 🔍 Heuristic warning: likely ingestion / readability issue
         # Case 1: Document likely unreadable
