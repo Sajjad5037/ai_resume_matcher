@@ -56,7 +56,7 @@ if "active_candidate" not in st.session_state:
 st.success("Gemini API key loaded successfully.")
 
 
-st.title("AI Resume Matcher (new)")
+st.title("AI Resume Matcher (old)")
 
 
 
