@@ -20,7 +20,7 @@ def to_gemini_part(uploaded_file):
     if uploaded_file.name.lower().endswith(".pdf"):
         mime_type = "application/pdf"
 
-    # Final fallback (should almost never be used)
+    # Final fallback (rare)
     if not mime_type:
         mime_type = uploaded_file.type
 
@@ -28,8 +28,6 @@ def to_gemini_part(uploaded_file):
         "mime_type": mime_type,
         "data": uploaded_file.read(),
     }
-
-
 
  
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
@@ -403,7 +401,7 @@ def get_available_jobs(df: pd.DataFrame):
 
 def ai_match_job(candidate_files, job, model_name):
     total_bytes = sum(len(f["data"]) for f in candidate_files)
-
+    
 
     
     prompt = f"""
@@ -419,15 +417,26 @@ Do NOT include newline characters inside strings.
 以下の履歴書（CV）と職務内容を比較し、
 CVに明示的に記載されている内容のみを根拠として評価してください。
 
-【重要ルール】
-- 推測や補完は禁止です。
-- 間接的・汎用的な関連経験が確認できる場合は「△」としてください。
-- CV に関連する根拠が一切確認できない場合のみ「×」としてください。
+【基本原則】
+- 評価は、CVに明示的に記載されている内容のみを根拠としてください。
+- 推測、補完、過度な解釈は禁止です。
 - 不足や未経験を断定してはいけません。
+
+【重要ルール】
+- 直接的かつ職務関連性の高い経験が確認できる場合は「○」としてください。
+- 間接的・汎用的・限定的な関連経験が確認できる場合は「△」としてください。
+- CV上に関連する根拠が一切確認できない場合のみ「×」としてください。
+
+【重要な補足ルール】
+- 求人に「未経験OK」「経験不問」「育成前提」などの記載がある場合、
+  必須要件における直接経験の欠如をマイナス評価として扱ってはいけません。
+- 年齢、キャリア初期段階、ポテンシャルを前提とした職種である可能性を考慮してください。
+- 明確な不一致が確認できない限り、
+  職務内容との適合性を「低い（×）」と断定してはいけません。
 
 【評価記号】
 ○：直接的かつ職務関連性の高い経験が確認できる  
-△：間接的・汎用的・限定的な関連経験が確認できる  
+△：間接的・汎用的・限定的な関連経験、または育成前提で評価可能  
 ×：関連する経験や根拠が一切確認できない  
 
 【出力JSON形式（厳守）】
@@ -443,11 +452,13 @@ CVに明示的に記載されている内容のみを根拠として評価して
 【スコア算出ルール】
 - score は 0 から 100 の整数で返してください。
 - 上記 criteria の評価結果を総合して score を算出してください。
-- CV に明示的な根拠がほとんど確認できない場合は、低い score を返してください。
+- 未経験可・育成前提の求人においては、
+  「△」評価が多い場合でも極端に低い score を返してはいけません。
 
 【職務内容】
 {job["job_context"][:1500]}
 """
+
 
 
 
@@ -461,7 +472,7 @@ CVに明示的に記載されている内容のみを根拠として評価して
                "max_output_tokens": 900,
            }
        )
-
+        
         
         # Log candidate count and content parts
         if not response.candidates:
@@ -476,6 +487,7 @@ CVに明示的に記載されている内容のみを根拠として評価して
         
         raw = response.text
         parsed = extract_json(raw)
+        
         # Defensive normalization
         try:
             parsed["score"] = int(parsed.get("score", 0))
@@ -568,13 +580,11 @@ if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
     candidate_files = []
 
     st.subheader("📎 Document ingestion log")
-    
+
     for f in st.session_state.cvs:
         part = to_gemini_part(f)
-    
         candidate_files.append(part)
     
-        # UI log (very important for debugging)
         st.code(
             {
                 "filename": f.name,
