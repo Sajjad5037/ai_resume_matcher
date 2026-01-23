@@ -56,7 +56,7 @@ if "active_candidate" not in st.session_state:
 st.success("Gemini API key loaded successfully.")
 
 
-st.title("AI Resume Matcher (old)")
+st.title("AI Resume Matcher (new)")
 
 
 
@@ -575,6 +575,12 @@ if st.session_state.results:
             for name in cv_block.get("cv_files", []):
                 st.markdown(f"- {name}")
         
+            st.caption(
+                "※ アップロードされた履歴書ファイルは、AIが直接読み取り・評価しています。"
+                " 事前のテキスト抽出やOCR処理は行っていません。"
+            )
+
+        
             for job_idx, r in enumerate(cv_block["results"]):
                 job = r["job"]
         
@@ -599,10 +605,11 @@ if st.session_state.results:
                     st.session_state.explain_open[explain_key] = False
         
                 if st.button(
-                    f"Explain – {cv_block['cv_name']} – {job['title']}",
+                    f"分析詳細（この評価の理由） – {job['title']}",
                     key=f"explain_btn_{explain_key}"
                 ):
                     st.session_state.explain_open[explain_key] = True
+
                     if explain_key not in st.session_state.explanations:
                         st.session_state.explanations[explain_key] = generate_explanation(job, r)
 
@@ -613,7 +620,8 @@ if st.session_state.results:
                         st.markdown("### 📝 評価サマリー")
                         st.write(sections.get("SUMMARY", ""))
         
-                        with st.expander("📊 Evaluation details", expanded=True):
+                        with st.expander("📊 評価詳細", expanded=True):
+
                             st.markdown("**必須要件（Must-have）**")
                             st.write(sections.get("MUST_HAVE", ""))
                             st.markdown("**歓迎要件（Preferred）**")
