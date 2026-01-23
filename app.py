@@ -402,6 +402,8 @@ def get_available_jobs(df: pd.DataFrame):
 
 
 def ai_match_job(candidate_files, job, model_name):
+    total_bytes = sum(len(f["data"]) for f in candidate_files)
+
 
     
     prompt = f"""
@@ -429,14 +431,14 @@ CVに明示的に記載されている内容のみを根拠として評価して
 ×：関連する経験や根拠が一切確認できない  
 
 【出力JSON形式（厳守）】
-{
+{{
   "score": 0,
-  "criteria": {
+  "criteria": {{
     "must_have_requirements": "○|△|×",
     "preferred_requirements": "○|△|×",
     "role_alignment": "○|△|×"
-  }
-}
+  }}
+}}
 
 【スコア算出ルール】
 - score は 0 から 100 の整数で返してください。
@@ -475,17 +477,30 @@ CVに明示的に記載されている内容のみを根拠として評価して
         raw = response.text
         parsed = extract_json(raw)
         # Defensive normalization
-        if not isinstance(parsed.get("score"), int):
+        try:
+            parsed["score"] = int(parsed.get("score", 0))
+        except (ValueError, TypeError):
             parsed["score"] = 0
+
         # 🔍 Heuristic warning: likely ingestion / readability issue
-        if (
+        # Case 1: Document likely unreadable
+        if total_bytes < 2000:
+            st.warning(
+                "⚠️ The uploaded document may contain little readable text "
+                "(e.g. scanned or image-based PDF)."
+            )
+        
+        # Case 2: Valid evaluation, but no match
+        elif (
             parsed.get("score", 0) == 0 and
             all(v == "×" for v in parsed.get("criteria", {}).values())
         ):
-            st.warning(
-                "⚠️ The evaluation returned no matching signals. "
-                "This may indicate the CV content was not fully readable by the model."
+            st.info(
+                "ℹ️ No matching signals were found for this role. "
+                "This likely reflects a genuine CV–job mismatch."
             )
+
+
 
 
 
