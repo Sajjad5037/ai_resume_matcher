@@ -403,10 +403,7 @@ def get_available_jobs(df: pd.DataFrame):
 
 def ai_match_job(candidate_files, job, model_name):
 
-    """
-    Gemini 2.5 Flash – minimal, deterministic JSON version
-    """
-
+    
     prompt = f"""
 Return ONLY valid JSON.
 No markdown.
@@ -420,11 +417,10 @@ Do NOT include newline characters inside strings.
 以下の履歴書（CV）と職務内容を比較し、
 CVに明示的に記載されている内容のみを根拠として評価してください。
 
-
 【重要ルール】
 - 推測や補完は禁止です。
 - 間接的・汎用的な関連経験が確認できる場合は「△」としてください。
-- 関連する根拠がCV上に一切確認できない場合のみ「×」としてください。
+- CV に関連する根拠が一切確認できない場合のみ「×」としてください。
 - 不足や未経験を断定してはいけません。
 
 【評価記号】
@@ -433,21 +429,25 @@ CVに明示的に記載されている内容のみを根拠として評価して
 ×：関連する経験や根拠が一切確認できない  
 
 【出力JSON形式（厳守）】
-{{
+{
   "score": 0,
-  "criteria": {{
+  "criteria": {
     "must_have_requirements": "○|△|×",
     "preferred_requirements": "○|△|×",
     "role_alignment": "○|△|×"
-  }}
-}}
+  }
+}
 
-以下の履歴書（CV）ファイルと職務内容を比較し、
-CVに明示的に記載されている内容のみを根拠として評価してください。
+【スコア算出ルール】
+- score は 0 から 100 の整数で返してください。
+- 上記 criteria の評価結果を総合して score を算出してください。
+- CV に明示的な根拠がほとんど確認できない場合は、低い score を返してください。
 
 【職務内容】
 {job["job_context"][:1500]}
 """
+
+
 
     try:
         model = genai.GenerativeModel(model_name)
@@ -474,6 +474,9 @@ CVに明示的に記載されている内容のみを根拠として評価して
         
         raw = response.text
         parsed = extract_json(raw)
+        # Defensive normalization
+        if not isinstance(parsed.get("score"), int):
+            parsed["score"] = 0
         # 🔍 Heuristic warning: likely ingestion / readability issue
         if (
             parsed.get("score", 0) == 0 and
