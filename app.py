@@ -285,22 +285,34 @@ Do not add extra keys.
         return safe_parse_json(response.text)
 
     except Exception:
-        # Hard fallback in case of error
-        if score == 0:
+        # Score-aware fallback (STRICTNESS SAFE)
+    
+        if score < 20 and job["seniority"] != "ENTRY":
+            # Only here is strict language allowed
             return {
-                "SUMMARY": "提供された履歴書の内容からは、当該職種において内定に至る可能性は現時点では低いと判断されます。",
-                "MUST_HAVE": "必須要件に該当する明確な経験や根拠が履歴書上で確認できませんでした。",
-                "PREFERRED": "歓迎要件についても、直接的な適合性は限定的であると考えられます。",
-                "ALIGNMENT": "職務内容との直接的な一致は確認できず、業務適合性は低いと判断されます。"
+                "SUMMARY": "提供された履歴書の内容から判断すると、当該職種において現時点での内定可能性は限定的であると考えられます。",
+                "MUST_HAVE": "必須要件に該当する明確な経験や根拠が、履歴書上では確認できませんでした。",
+                "PREFERRED": "歓迎要件についても、直接的な適合性を示す記載は限定的です。",
+                "ALIGNMENT": "職務内容との直接的な一致は確認できず、現時点では業務との親和性は高いとは言えません。"
             }
-
-        return {
-            "SUMMARY": "履歴書の内容を総合的に判断すると、一部に評価可能な要素はあるものの、内定可能性は限定的であると考えられます。",
-            "MUST_HAVE": "必須要件については一部満たしている可能性はあるものの、十分な根拠は確認できませんでした。",
-            "PREFERRED": "歓迎要件については限定的な適合性が確認できます。",
-            "ALIGNMENT": "業務内容との親和性は一定程度確認できますが、決定的とは言えません。"
-        }
-
+    
+        elif score < 60:
+            # Neutral / ENTRY-safe language
+            return {
+                "SUMMARY": "履歴書の内容から、当該職種において一定の検討余地があると考えられます。",
+                "MUST_HAVE": "必須要件については明確な経験の記載は限定的ですが、育成や学習によって補完可能な余地があります。",
+                "PREFERRED": "歓迎要件については一部に関連性が見られるものの、限定的な内容にとどまっています。",
+                "ALIGNMENT": "職務内容との親和性については現時点で判断材料が限られており、今後の成長次第で評価が変わる可能性があります。"
+            }
+    
+        else:
+            # Positive framing
+            return {
+                "SUMMARY": "履歴書の内容から、当該職種との適合性が一定程度確認でき、前向きに検討できる可能性があります。",
+                "MUST_HAVE": "必須要件については、履歴書上の記載から一定の関連性が確認できます。",
+                "PREFERRED": "歓迎要件についても、評価可能な要素が含まれています。",
+                "ALIGNMENT": "職務内容との親和性は比較的高く、業務への適応が期待されます。"
+            }
 
 def generate_with_retry(model, prompt, candidate_files, retries=1):
     last_error = None
