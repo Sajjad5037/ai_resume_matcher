@@ -146,12 +146,10 @@ def safe_parse_json(text):
 
 
 
-def generate_explanation(job, evaluation):
-
+def generate_explanation(job, evaluation, candidate_seniority):
 
     score = evaluation["score"]
 
-    # Create a prompt based on client requirements
     prompt = f"""
 Return ONLY valid JSON.
 Do not include markdown.
@@ -161,31 +159,20 @@ Do not add extra keys.
 【職種レベル】
 この求人は「{job['seniority']} レベル」の募集です。
 
+【候補者レベル】
+この候補者は「{candidate_seniority} レベル」と推定されます。
+
 【スコアの意味（厳守）】
 - 想定内定確率は書類選考段階での可能性を示します。
 - ENTRY レベルにおいて、経験不足は不適合を意味しません。
 
-【スコア別・表現制御ルール（厳守）】
-- 想定内定確率が 30％以上の場合：
-  「低い」「不適合」「内定に至る可能性は低い」などの
-  否定的・結論的な表現を使用してはいけません。
-- 想定内定確率が 30〜60％の場合：
-  「一定の可能性」「育成前提」「検討余地」などの表現を必ず含めてください。
-- 想定内定確率が 60％以上の場合：
-  前向きな適合要素・強みを中心に記述してください。
-- 想定内定確率が 20％未満の場合のみ：
-  課題・不足点を明確に指摘してください。
-
-【絶対禁止表現（30％以上では使用不可）】
-- 低い
-- 不適合
-- 見送り
-- 内定に至る可能性は低い
-- 業務適合性は低い
-
-あなたは、採用・書類選考の実務経験が豊富な人材アドバイザーです。
-以下の「評価結果」のみを根拠として、
-採用担当者が判断しやすい説明を作成してください。
+【表現制御ルール（最重要）】
+- 候補者が ENTRY でない場合：
+  「育成」「学習」「判断材料が限られている」
+  といった表現を使用してはいけません。
+- 経験が確認できる場合は、
+  「役割期待の違い」「求人要件との一部差異」
+  として説明してください。
 
 【評価コンテキスト】
 - 必須要件の評価：{evaluation["criteria"]["must_have_requirements"]}
@@ -205,7 +192,6 @@ Do not add extra keys.
 {job["job_context"][:1200]}
 """
 
-
     model = genai.GenerativeModel(SELECTED_MODEL)
 
     response = model.generate_content(
@@ -216,36 +202,45 @@ Do not add extra keys.
         }
     )
 
-
     try:
         return safe_parse_json(response.text)
 
     except Exception:
-        # Score-aware fallback (STRICTNESS SAFE)
-    
+        # ---------- FALLBACK (STRICTLY CONTROLLED) ----------
+
+        # ❌ Low score & non-entry → strict is allowed
         if score < 20 and job["seniority"] != "ENTRY":
-            # Only here is strict language allowed
             return {
-                "SUMMARY": "提供された履歴書の内容から判断すると、当該職種において現時点での内定可能性は限定的であると考えられます。",
-                "MUST_HAVE": "必須要件に該当する明確な経験や根拠が、履歴書上では確認できませんでした。",
+                "SUMMARY": "提供された履歴書の内容から、当該職種において現時点での内定可能性は限定的であると考えられます。",
+                "MUST_HAVE": "必須要件に該当する職務経験や成果が、履歴書上では十分に確認できませんでした。",
                 "PREFERRED": "歓迎要件についても、直接的な適合性を示す記載は限定的です。",
-                "ALIGNMENT": "職務内容との直接的な一致は確認できず、現時点では業務との親和性は高いとは言えません。"
+                "ALIGNMENT": "職務内容との直接的な一致は確認できず、役割要件との乖離が見られます。"
             }
-    
+
+        # ⚠️ Medium score (language depends on candidate level)
         elif score < 60:
-            # Neutral / ENTRY-safe language
-            return {
-                "SUMMARY": "履歴書の内容から、当該職種において一定の検討余地があると考えられます。",
-                "MUST_HAVE": "必須要件については明確な経験の記載は限定的ですが、育成や学習によって補完可能な余地があります。",
-                "PREFERRED": "歓迎要件については一部に関連性が見られるものの、限定的な内容にとどまっています。",
-                "ALIGNMENT": "職務内容との親和性については現時点で判断材料が限られており、今後の成長次第で評価が変わる可能性があります。"
-            }
-    
+
+            if candidate_seniority == "ENTRY":
+                return {
+                    "SUMMARY": "履歴書の内容から、当該職種において一定の検討余地があると考えられます。",
+                    "MUST_HAVE": "必須要件については明確な経験の記載は限定的ですが、育成や学習によって補完可能な余地があります。",
+                    "PREFERRED": "歓迎要件については一部に関連性が見られるものの、限定的な内容にとどまっています。",
+                    "ALIGNMENT": "職務内容との親和性については、今後の成長次第で評価が変わる可能性があります。"
+                }
+
+            else:
+                return {
+                    "SUMMARY": "履歴書の内容から、当該職種において一定の可能性が見られます。",
+                    "MUST_HAVE": "必須要件に関連する実務経験や成果は確認できますが、求人で想定されている役割や期待との間に一部差異が見られます。",
+                    "PREFERRED": "歓迎要件については、職務に活かせる要素が一部確認できます。",
+                    "ALIGNMENT": "職務内容との適合性については、業界特性や役割期待の違いを踏まえた検討が必要です。"
+                }
+
+        # ✅ High score → positive framing
         else:
-            # Positive framing
             return {
                 "SUMMARY": "履歴書の内容から、当該職種との適合性が一定程度確認でき、前向きに検討できる可能性があります。",
-                "MUST_HAVE": "必須要件については、履歴書上の記載から一定の関連性が確認できます。",
+                "MUST_HAVE": "必須要件については、職務に関連する十分な経験や成果が確認できます。",
                 "PREFERRED": "歓迎要件についても、評価可能な要素が含まれています。",
                 "ALIGNMENT": "職務内容との親和性は比較的高く、業務への適応が期待されます。"
             }
