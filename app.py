@@ -156,7 +156,7 @@ Do not include markdown.
 Do not include any text outside JSON.
 Do not add extra keys.
 
-【職種レベル】
+【求人レベル】
 この求人は「{job['seniority']} レベル」の募集です。
 
 【候補者レベル】
@@ -164,21 +164,32 @@ Do not add extra keys.
 
 【スコアの意味（厳守）】
 - 想定内定確率は書類選考段階での可能性を示します。
-- ENTRY レベルにおいて、経験不足は不適合を意味しません。
+- ENTRY 求人において、経験不足を前提とした表現は禁止です。
 
-【表現制御ルール（最重要）】
-- 候補者が ENTRY でない場合：
-  「育成」「学習」「判断材料が限られている」
-  といった表現を使用してはいけません。
-- 経験が確認できる場合は、
-  「役割期待の違い」「求人要件との一部差異」
-  として説明してください。
+【レベル差に関する表現ルール（最重要）】
+- 候補者レベルが求人レベルを上回る場合：
+  以下の表現のみを使用してください。
+  ・役割期待の違い
+  ・業務範囲・責任設計の相違
+  ・ポジション特性とのミスマッチ
+
+  以下の表現は絶対に使用してはいけません。
+  ・育成
+  ・学習
+  ・成長次第
+  ・判断材料が限られている
+
+【スコア別・表現制御ルール】
+- 想定内定確率が 30％以上の場合：
+  否定的・結論的な表現は禁止
+- 想定内定確率が 20％未満の場合のみ：
+  課題や懸念点を明確に記述してよい
 
 【評価コンテキスト】
 - 必須要件の評価：{evaluation["criteria"]["must_have_requirements"]}
 - 歓迎要件の評価：{evaluation["criteria"]["preferred_requirements"]}
 - 職務内容との適合性：{evaluation["criteria"]["role_alignment"]}
-- 想定内定確率：{score}％
+- 想定内定確率：{evaluation["score"]}％
 
 【出力JSON形式（厳守）】
 {{
@@ -191,6 +202,7 @@ Do not add extra keys.
 【職務内容】
 {job["job_context"][:1200]}
 """
+
 
     model = genai.GenerativeModel(SELECTED_MODEL)
 
