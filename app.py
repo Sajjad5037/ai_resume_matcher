@@ -20,7 +20,8 @@ def get_display_score(score: int, seniority: str) -> int:
 
 
 def detect_seniority(job_context: str) -> str:
-    keywords_entry = ["未経験OK", "経験不問", "育成", "第二新卒"]
+    keywords_entry = ["未経験OK", "経験不問", "第二新卒"]
+
     keywords_senior = ["3年以上", "5年以上", "リード", "マネージャー"]
 
     for k in keywords_entry:
@@ -213,11 +214,7 @@ Do not add extra keys.
     try:
         result = safe_parse_json(response.text)
         # 🔍 DEBUG: confirm level pairing
-        st.write(
-            "DEBUG seniority →",
-            "job:", job["seniority"],
-            "| candidate:", candidate_seniority
-        )
+        
         # 🚨 HARD OVERRIDE: ENTRY job + non-ENTRY candidate
         if is_overqualified_for_entry:
 
@@ -361,12 +358,13 @@ def detect_candidate_seniority_from_cv(candidate_files):
         return "SENIOR"
 
     numeric_mid_patterns = [
-        r"\d+年",
-        r"\d+年目",
-        r"\d{2,4}万円",
+        r"[2-9]年",
+        r"[2-9]年目",
+        r"\d{3,4}万円",
         r"平均年収",
-        r"年収\d+",
+        r"年収\d{3,4}",
     ]
+
     
     if any(re.search(p, text_hint) for p in numeric_mid_patterns):
         return "MID"
@@ -794,6 +792,10 @@ if st.session_state.results:
                     st.session_state.explain_open[explain_key] = True
 
                     if explain_key not in st.session_state.explanations:
+                        st.caption(
+                            f"DEBUG → job={job['seniority']} | candidate={st.session_state.candidate_seniority}"
+                        )
+
                         st.session_state.explanations[explain_key] = generate_explanation(
                             job,
                             r,
