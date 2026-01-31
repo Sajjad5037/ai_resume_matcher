@@ -97,7 +97,7 @@ if "active_candidate" not in st.session_state:
 st.success("Gemini API key loaded successfully.")
 
 
-st.title("AI Resume Matcher (new)")
+st.title("AI Resume Matcher (hello)")
 
 
 
@@ -294,15 +294,24 @@ def extract_json(text):
 # Helpers
 # ----------------------------
 def detect_candidate_seniority_from_cv(candidate_files):
-    # lightweight signal-based heuristic
     text_hint = ""
     for f in candidate_files:
-        text_hint += f["data"][:2000].decode(errors="ignore")
+        text_hint += f["data"][:5000].decode(errors="ignore")
 
-    if any(k in text_hint for k in ["店長", "マネージャー", "副店長"]):
-        return "SENIOR"
-    if any(k in text_hint for k in ["3年", "5年", "10年"]):
+    senior_signals = [
+        "売上", "実績", "成果", "達成",
+        "営業", "不動産",
+        "年収", "月収",
+        "担当", "顧客",
+        "契約", "案件"
+    ]
+
+    if any(k in text_hint for k in senior_signals):
         return "MID"
+
+    if any(k in text_hint for k in ["店長", "マネージャー", "責任者"]):
+        return "SENIOR"
+
     return "ENTRY"
 
 
