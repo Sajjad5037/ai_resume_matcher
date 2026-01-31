@@ -270,7 +270,7 @@ Do not add extra keys.
                 }
 
             # ✅ True ENTRY candidate → growth framing allowed
-            if candidate_seniority == "ENTRY":
+            if candidate_seniority == "ENTRY" and job["seniority"] == "ENTRY":
                 return {
                     "SUMMARY": "履歴書の内容から、当該職種において一定の検討余地があると考えられます。",
                     "MUST_HAVE": "必須要件については明確な経験の記載は限定的ですが、育成や学習によって補完可能な余地があります。",
