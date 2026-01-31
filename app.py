@@ -728,7 +728,12 @@ if st.session_state.results:
                     st.session_state.explain_open[explain_key] = True
 
                     if explain_key not in st.session_state.explanations:
-                        st.session_state.explanations[explain_key] = generate_explanation(job, r)
+                        st.session_state.explanations[explain_key] = generate_explanation(
+                            job,
+                            r,
+                            st.session_state.candidate_seniority
+                        )
+
 
         
                 if st.session_state.explain_open.get(explain_key, False):
