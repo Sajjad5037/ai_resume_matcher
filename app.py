@@ -1,7 +1,6 @@
 import os 
 import streamlit as st
-from pypdf import PdfReader
-from docx import Document 
+
 import io
 import pandas as pd
 import json 
@@ -135,56 +134,6 @@ st.write(
 )
 
 
-def extract_cv_text_from_uploaded_file(uploaded_file) -> str:
-    uploaded_file.seek(0)
-    file_type = uploaded_file.type
-
-    # ----------------
-    # PDF (SAFE)
-    # ----------------
-    if file_type == "application/pdf":
-        reader = PdfReader(uploaded_file)
-        text = []
-        failed_pages = 0
-
-        for page in reader.pages:
-            try:
-                page_text = page.extract_text()
-                if page_text and page_text.strip():
-                    text.append(page_text)
-            except Exception:
-                failed_pages += 1
-                continue
-
-        if failed_pages > 0:
-            st.warning(
-                f"⚠️ {uploaded_file.name}: {failed_pages} page(s) could not be read and were skipped."
-            )
-
-        return "\n".join(text)
-
-    # ----------------
-    # DOCX
-    # ----------------
-    if file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        doc = Document(io.BytesIO(uploaded_file.read()))
-        return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
-
-    # ----------------
-    # XLSX
-    # ----------------
-    if file_type == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
-        df_dict = pd.read_excel(uploaded_file, sheet_name=None)
-        blocks = []
-        for sheet, df in df_dict.items():
-            blocks.append(f"【Sheet: {sheet}】")
-            for _, row in df.iterrows():
-                row_text = " ".join(str(v) for v in row.values if not pd.isna(v))
-                if row_text.strip():
-                    blocks.append(row_text)
-        return "\n".join(blocks)
-
-    return ""
 
 
 def safe_parse_json(text):
@@ -196,29 +145,6 @@ def safe_parse_json(text):
 
 
 
-def aggregate_candidate_cv_text(uploaded_files):
-    combined_blocks = []
-    filenames = []
-
-    for file in uploaded_files:
-        try:
-            text = extract_cv_text_from_uploaded_file(file)
-        except Exception:
-            st.error(f"❌ Failed to process {file.name}")
-            continue
-
-        if text.strip():
-            combined_blocks.append(f"\n\n--- {file.name} ---\n{text}")
-            filenames.append(file.name)
-        else:
-            st.info(
-                f"ℹ️ {file.name} contains little or no readable text."
-            )
-
-    return {
-        "cv_text": "\n".join(combined_blocks),
-        "filenames": filenames
-    }
 
 def generate_explanation(job, evaluation):
 
@@ -367,21 +293,17 @@ def extract_json(text):
 # ----------------------------
 # Helpers
 # ----------------------------
-def extract_text(uploaded_file):
-    if uploaded_file.type == "application/pdf":
-        reader = PdfReader(uploaded_file)
-        text = []
-        for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text.append(page_text)
-        return "\n".join(text)
+def detect_candidate_seniority_from_cv(candidate_files):
+    # lightweight signal-based heuristic
+    text_hint = ""
+    for f in candidate_files:
+        text_hint += f["data"][:2000].decode(errors="ignore")
 
-    if uploaded_file.type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        doc = Document(io.BytesIO(uploaded_file.read()))
-        return "\n".join(p.text for p in doc.paragraphs)
-
-    return ""
+    if any(k in text_hint for k in ["店長", "マネージャー", "副店長"]):
+        return "SENIOR"
+    if any(k in text_hint for k in ["3年", "5年", "10年"]):
+        return "MID"
+    return "ENTRY"
 
 
 def get_title(row):
@@ -467,7 +389,8 @@ def calculate_score(criteria: dict, seniority: str) -> int:
     
 
 
-def ai_match_job(candidate_files, job, model_name):
+def ai_match_job(candidate_files, job, model_name, candidate_seniority):
+
     total_bytes = sum(len(f["data"]) for f in candidate_files)
     
 
@@ -485,14 +408,24 @@ Do NOT include newline characters inside strings.
 以下の履歴書（CV）と職務内容を比較し、
 CVに明示的に記載されている内容のみを根拠として評価してください。
 
-【職種レベル】
+【求人レベル】
 この求人は「{job['seniority']} レベル」に分類されます。
 
+【候補者レベル】
+この候補者は「{candidate_seniority} レベル」と推定されます。
+
+【レベル差に関する重要ルール（必ず遵守）】
+- 候補者レベルが求人レベルを上回る場合：
+  経験不足として評価してはいけません。
+  業界の違い、役割期待の違い、ポジションのミスマッチとして説明してください。
+- 候補者レベルが求人レベルと同等または下回る場合：
+  求人要件に対する経験の有無を通常どおり評価してください。
+
 【レベル別評価方針】
-- ENTRY の場合：
+- ENTRY 求人の場合：
   実務経験の欠如はマイナス評価にしてはいけません。
-  学習や育成によって補完可能な要素は「△」として前向きに評価してください。
-- MID / SENIOR の場合：
+  学習・育成によって補完可能な要素は「△」として前向きに評価してください。
+- MID / SENIOR 求人の場合：
   職務に直接関連する実務経験の有無をより重視してください。
 
 【評価の基本方針】
@@ -506,10 +439,12 @@ CVに明示的に記載されている内容のみを根拠として評価して
 - CV上に関連する根拠が一切確認できない場合のみ「×」としてください。
 
 【重要な補足ルール（必ず遵守）】
-- ENTRY レベルの求人においては、
+- ENTRY 求人においては、
   必須要件における直接経験の欠如をマイナス評価として扱ってはいけません。
 - 明確な不一致が確認できない限り、
   職務内容との適合性を「低い（×）」と断定してはいけません。
+- 経験が十分に確認できる場合、
+  「判断材料が限られている」「育成前提」などの表現を使用してはいけません。
 
 【評価記号の定義】
 ○：直接的かつ職務関連性の高い経験が確認できる  
@@ -529,7 +464,7 @@ CVに明示的に記載されている内容のみを根拠として評価して
 【スコア算出ルール】
 - score は 0 から 100 の整数で返してください。
 - criteria の評価結果を総合して score を算出してください。
-- ENTRY レベルの求人においては、
+- ENTRY 求人においては、
   「△」が多い場合でも score を極端に低く設定してはいけません。
 - 明確な不一致（×）が複数確認される場合のみ、低スコアを検討してください。
 
@@ -658,6 +593,7 @@ if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
 
     # 🔹 Aggregate ALL CVs into ONE candidate
     candidate_files = []
+    
 
     st.subheader("📎 Document ingestion log")
 
@@ -676,7 +612,11 @@ if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
 
 
     cv_files = [f.name for f in st.session_state.cvs]
+    candidate_seniority = detect_candidate_seniority_from_cv(candidate_files)
+    st.session_state.candidate_seniority = candidate_seniority
+
     st.session_state.candidate_files = candidate_files
+    
 
 
     
@@ -687,7 +627,13 @@ if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
     for job_idx, job in enumerate(jobs, start=1):
         status.info(f"Evaluating Job {job_idx}/{len(jobs)}")
     
-        result = ai_match_job(candidate_files, job, SELECTED_MODEL)
+        result = ai_match_job(
+            candidate_files,
+            job,
+            SELECTED_MODEL,
+            candidate_seniority
+        )
+
 
     
         cv_results.append({
