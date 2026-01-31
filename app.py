@@ -212,7 +212,12 @@ Do not add extra keys.
 
     try:
         result = safe_parse_json(response.text)
-
+        # 🔍 DEBUG: confirm level pairing
+        st.write(
+            "DEBUG seniority →",
+            "job:", job["seniority"],
+            "| candidate:", candidate_seniority
+        )
         # 🚨 HARD OVERRIDE: ENTRY job + non-ENTRY candidate
         if is_overqualified_for_entry:
 
@@ -342,10 +347,11 @@ def detect_candidate_seniority_from_cv(candidate_files):
     mid_signals = [
         "役職", "リーダー", "主任",
         "売上", "実績", "成果", "達成",
-        "年収", "月収",
+        "年収", "万円",
         "契約", "案件", "顧客",
-        "マネジメント", "管理"
+        "営業", "不動産"
     ]
+
 
     senior_signals = [
         "店長", "マネージャー", "責任者", "統括"
@@ -354,9 +360,19 @@ def detect_candidate_seniority_from_cv(candidate_files):
     if any(k in text_hint for k in senior_signals):
         return "SENIOR"
 
+    numeric_mid_patterns = [
+        r"\d+年",
+        r"\d+年目",
+        r"\d{2,4}万円",
+        r"平均年収",
+        r"年収\d+",
+    ]
+    
+    if any(re.search(p, text_hint) for p in numeric_mid_patterns):
+        return "MID"
+    
     if any(k in text_hint for k in mid_signals):
         return "MID"
-
     return "ENTRY"
 
 
