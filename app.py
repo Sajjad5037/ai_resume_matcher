@@ -751,9 +751,10 @@ if st.session_state.results:
                 st.markdown(f"- {name}")
         
             st.caption(
-                "※ アップロードされた履歴書ファイルは、AIが直接読み取り・評価しています。"
-                " 事前のテキスト抽出やOCR処理は行っていません。"
+                "※ アップロードされた履歴書は、AIが内容を直接理解し評価しています。"
+                " 追加の事前処理は不要な設計のため、迅速に分析結果を提供できます。"
             )
+
 
         
             for job_idx, r in enumerate(cv_block["results"]):
@@ -792,10 +793,7 @@ if st.session_state.results:
                     st.session_state.explain_open[explain_key] = True
 
                     if explain_key not in st.session_state.explanations:
-                        st.caption(
-                            f"DEBUG → job={job['seniority']} | candidate={st.session_state.candidate_seniority}"
-                        )
-
+                        
                         st.session_state.explanations[explain_key] = generate_explanation(
                             job,
                             r,
