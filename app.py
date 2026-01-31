@@ -303,21 +303,26 @@ def extract_json(text):
 def detect_candidate_seniority_from_cv(candidate_files):
     text_hint = ""
     for f in candidate_files:
-        text_hint += f["data"][:5000].decode(errors="ignore")
+        text_hint += f["data"][:8000].decode(errors="ignore")
+
+    # Strong MID / SENIOR signals (numbers + responsibility)
+    mid_signals = [
+        "役職", "リーダー", "主任",
+        "売上", "実績", "成果", "達成",
+        "年収", "月収",
+        "契約", "案件", "顧客",
+        "マネジメント", "管理"
+    ]
 
     senior_signals = [
-        "売上", "実績", "成果", "達成",
-        "営業", "不動産",
-        "年収", "月収",
-        "担当", "顧客",
-        "契約", "案件"
+        "店長", "マネージャー", "責任者", "統括"
     ]
 
     if any(k in text_hint for k in senior_signals):
-        return "MID"
-
-    if any(k in text_hint for k in ["店長", "マネージャー", "責任者"]):
         return "SENIOR"
+
+    if any(k in text_hint for k in mid_signals):
+        return "MID"
 
     return "ENTRY"
 
