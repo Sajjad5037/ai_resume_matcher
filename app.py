@@ -211,7 +211,25 @@ Do not add extra keys.
     )
 
     try:
-        return safe_parse_json(response.text)
+        result = safe_parse_json(response.text)
+
+        # 🚨 HARD OVERRIDE: ENTRY job + non-ENTRY candidate
+        if job["seniority"] == "ENTRY" and candidate_seniority in ["MID", "SENIOR"]:
+            result["ALIGNMENT"] = (
+                "本求人はENTRYレベルの役割設計となっており、"
+                "候補者の経験水準や期待役割との間に差異が見られます。"
+                "業務範囲や責任設計の観点から、役割期待の整理が必要です。"
+            )
+        
+            # Also clean MUST_HAVE if needed
+            if "育成" in result.get("MUST_HAVE", ""):
+                result["MUST_HAVE"] = (
+                    "必須要件に関連する経験は確認できますが、"
+                    "本求人で想定されている役割水準とは一部異なる可能性があります。"
+                )
+        
+        return result
+        
 
     except Exception:
         # ---------- FALLBACK (STRICT & INTENT-AWARE) ----------
