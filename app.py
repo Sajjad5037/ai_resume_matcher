@@ -214,7 +214,8 @@ Do not add extra keys.
         result = safe_parse_json(response.text)
 
         # 🚨 HARD OVERRIDE: ENTRY job + non-ENTRY candidate
-        if job["seniority"] == "ENTRY" and candidate_seniority in ["MID", "SENIOR"]:
+        if is_overqualified_for_entry:
+
             result["ALIGNMENT"] = (
                 "本求人はENTRYレベルの役割設計となっており、"
                 "候補者の経験水準や期待役割との間に差異が見られます。"
@@ -226,6 +227,14 @@ Do not add extra keys.
                 result["MUST_HAVE"] = (
                     "必須要件に関連する経験は確認できますが、"
                     "本求人で想定されている役割水準とは一部異なる可能性があります。"
+                )
+            if (
+                "育成" in result.get("SUMMARY", "")
+                or "成長" in result.get("SUMMARY", "")
+            ):
+                result["SUMMARY"] = (
+                    "履歴書の内容から、当該職種に対して一定の可能性は見られますが、"
+                    "本求人の役割設計との間に期待値の違いが見受けられます。"
                 )
         
         return result
