@@ -6,7 +6,7 @@ import pandas as pd
 import json 
 #from openai import OpenAI
 import re
-#import google.generativeai as genai
+
 from google.genai import types
 
 import mimetypes
