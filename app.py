@@ -76,7 +76,7 @@ No text outside JSON.
 
 
     response = client.models.generate_content(
-        model=model_name,
+        model="models/gemini-1.5-flash",
         contents=contents,
         generation_config=types.GenerationConfig(
             temperature=0.3,
@@ -128,7 +128,7 @@ client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 def test_gemini_text_only():
     response = client.models.generate_content(
-        model="models/gemini-2.0-flash",
+         model="models/gemini-1.5-flash",
         contents="Say OK"
     )
     st.write("Gemini test response:", response.text)
@@ -274,7 +274,7 @@ Do not add extra keys.
 
     
     response = client.models.generate_content(
-        model=SELECTED_MODEL,
+         model="models/gemini-1.5-flash",
         contents=contents,
         generation_config=types.GenerationConfig(
             temperature=0.3,
@@ -501,7 +501,7 @@ You are screening a candidate at the document-review stage.
 
 
     response = client.models.generate_content(
-        model=model_name,
+         model="models/gemini-1.5-flash",
         contents=contents,
         generation_config=types.GenerationConfig(
             temperature=0.3,
