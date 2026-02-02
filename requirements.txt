@@ -4,5 +4,4 @@ python-docx
 pandas
 openpyxl
 openai
-google-genai
-google-generativeai
+google-generativeai==0.5.4
