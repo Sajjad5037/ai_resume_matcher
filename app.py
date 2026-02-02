@@ -7,7 +7,7 @@ import json
 #from openai import OpenAI
 import re
 import google.generativeai as genai
-from google.generativeai.types import Part
+
 
 import mimetypes
 st.write(
@@ -116,17 +116,16 @@ def to_gemini_part(uploaded_file):
     uploaded_file.seek(0)
 
     mime_type, _ = mimetypes.guess_type(uploaded_file.name)
-
     if uploaded_file.name.lower().endswith(".pdf"):
         mime_type = "application/pdf"
 
     if not mime_type:
         mime_type = uploaded_file.type or "application/octet-stream"
 
-    return Part.from_bytes(
-        data=uploaded_file.read(),
-        mime_type=mime_type,
-    )
+    return {
+        "mime_type": mime_type,
+        "data": uploaded_file.read(),
+    }
 
  
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
