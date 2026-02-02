@@ -7,7 +7,7 @@ import json
 #from openai import OpenAI
 import re
 #import google.generativeai as genai
-
+from google.genai import types
 
 import mimetypes
 st.write(
@@ -69,24 +69,19 @@ No text outside JSON.
 - 上記の評価内容と整合する数値にしてください
 """
     
-    model = genai.GenerativeModel(model_name)
+    contents = [prompt, *candidate_files]
 
-    content_parts = prompt
-
-
-    
-    response = model.generate_content(
-        content_parts,
+    response = client.models.generate_content(
+        model=model_name,
+        contents=contents,
         generation_config={
             "temperature": 0.3,
             "max_output_tokens": 900,
         }
     )
 
-
     raw = response.text
-    parsed = extract_json(raw)
-    return parsed
+    return extract_json(raw)
 
 def get_display_score(score: int, seniority: str) -> int:
     """
@@ -113,21 +108,14 @@ def detect_seniority(job_context: str) -> str:
 
     return "MID"
 
+
 def to_gemini_part(uploaded_file):
     uploaded_file.seek(0)
 
-    mime_type, _ = mimetypes.guess_type(uploaded_file.name)
-    if uploaded_file.name.lower().endswith(".pdf"):
-        mime_type = "application/pdf"
-
-    if not mime_type:
-        mime_type = uploaded_file.type or "application/octet-stream"
-
-    return {
-        "mime_type": mime_type,
-        "data": uploaded_file.read(),
-    }
-
+    return types.Part.from_bytes(
+        data=uploaded_file.read(),
+        mime_type=uploaded_file.type or "application/octet-stream"
+    )
  
 from google import genai
 
@@ -177,22 +165,14 @@ st.success("Gemini API key loaded successfully.")
 
 
 st.title("AI Resume Matcher (hello)")
-test_gemini_text_only()
-st.stop()
+if st.checkbox("Run Gemini connectivity test"):
+    test_gemini_text_only()
 
 
 
 # ----------------------------
 # Model Selection & Diagnostics
 # ----------------------------
-try:
-    # This fetches the actual list from Google
-    available_models = [m.name for m in genai.list_models() if 'generateContent' in m.supported_generation_methods]
-except Exception as e:
-    st.error(f"Could not fetch models: {e}")
-    available_models = []
-st.subheader("✅ Available Gemini models for this project")
-st.code(available_models)
 
 
 # ----------------------------
@@ -221,12 +201,6 @@ st.write(
 
 
 
-def safe_parse_json(text):
-    start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end == -1 or end <= start:
-        raise ValueError("No valid JSON found")
-    return json.loads(text[start:end + 1])
 
 
 
@@ -288,12 +262,15 @@ Do not add extra keys.
 {job["job_context"][:1200]}
 """
 
-    model = genai.GenerativeModel(SELECTED_MODEL)
-
-    response = model.generate_content(
-        prompt,
-        generation_config={"temperature": 0.3, "max_output_tokens": 900}
+    response = client.models.generate_content(
+        model=SELECTED_MODEL,
+        contents=prompt,
+        generation_config={
+            "temperature": 0.3,
+            "max_output_tokens": 900
+        }
     )
+
 
     try:
         result = safe_parse_json(response.text)
@@ -376,28 +353,6 @@ Do not add extra keys.
                 "ALIGNMENT": "職務内容との親和性は比較的高く、業務への適応が期待されます。"
             }
 
-def generate_with_retry(model, prompt, candidate_files, retries=1):
-    last_error = None
-
-    for attempt in range(1, retries + 1):
-        response = model.generate_content(
-            prompt,  # ✅ now defined via parameter
-            generation_config={
-                "temperature": 0.3,
-                "max_output_tokens": 900,
-            }
-        )
-
-        candidate = response.candidates[0]
-        raw = candidate.content.parts[0].text
-
-        try:
-            parsed = extract_json(raw)
-            return parsed, raw
-        except Exception as e:
-            last_error = e
-
-    raise ValueError(f"Failed after retries: {last_error}")
 
 def extract_json(text):
     # Find the first opening brace
@@ -481,201 +436,67 @@ def get_available_jobs(df: pd.DataFrame):
         })
 
     return jobs
-def calculate_score(criteria: dict, seniority: str) -> int:
-    weights = {
-        "○": 1.0,
-        "△": 0.6,
-        "×": 0.0,
-    }
-
-    raw = (
-        weights.get(criteria.get("must_have_requirements"), 0) * 0.4 +
-        weights.get(criteria.get("preferred_requirements"), 0) * 0.3 +
-        weights.get(criteria.get("role_alignment"), 0) * 0.3
-    )
-
-    score = int(raw * 100)
-
-    # 🎯 Seniority-based soft floors
-    if seniority == "ENTRY":
-        score = max(score, 35)
-    elif seniority == "MID":
-        score = max(score, 20)
-    elif seniority == "SENIOR":
-        score = max(score, 10)
-
-    return min(score, 100)
     
 
 
 def ai_match_job(candidate_files, job, model_name, candidate_seniority):
+    """
+    Evaluates ONE candidate (multi-doc) against ONE job.
+    Returns structured criteria + score.
+    """
 
-    
-
-
-    
-
-    
     prompt = f"""
 Return ONLY valid JSON.
 No markdown.
-No explanations.
 No text outside JSON.
 
-All string values MUST be single-line.
-Do NOT include newline characters inside strings.
+You are screening a candidate at the document-review stage.
 
-あなたは、書類選考を担当する採用実務者です。
-以下の履歴書（CV）と職務内容を比較し、
-CVに明示的に記載されている内容のみを根拠として評価してください。
+【Job seniority】
+{job["seniority"]}
 
-【求人レベル】
-この求人は「{job['seniority']} レベル」に分類されます。
+【Candidate seniority】
+{candidate_seniority}
 
-【候補者レベル】
-この候補者は「{candidate_seniority} レベル」と推定されます。
-
-【レベル差に関する重要ルール（必ず遵守）】
-- 候補者レベルが求人レベルを上回る場合：
-  経験不足として評価してはいけません。
-  業界の違い、役割期待の違い、ポジションのミスマッチとして説明してください。
-- 候補者レベルが求人レベルと同等または下回る場合：
-  求人要件に対する経験の有無を通常どおり評価してください。
-
-【レベル別評価方針】
-- ENTRY 求人の場合：
-  実務経験の欠如はマイナス評価にしてはいけません。
-  学習・育成によって補完可能な要素は「△」として前向きに評価してください。
-- MID / SENIOR 求人の場合：
-  職務に直接関連する実務経験の有無をより重視してください。
-
-【評価の基本方針】
-- 評価は、CVに明示的に記載されている事実のみを根拠としてください。
-- 推測、補完、過度な解釈は禁止です。
-- 未記載の内容について、断定的な否定を行ってはいけません。
-
-【評価ルール】
-- 職務に直接関連する明確な経験が確認できる場合は「○」としてください。
-- 間接的・汎用的・限定的な関連経験が確認できる場合は「△」としてください。
-- CV上に関連する根拠が一切確認できない場合のみ「×」としてください。
-
-【重要な補足ルール（必ず遵守）】
-- ENTRY 求人においては、
-  必須要件における直接経験の欠如をマイナス評価として扱ってはいけません。
-- 明確な不一致が確認できない限り、
-  職務内容との適合性を「低い（×）」と断定してはいけません。
-- 経験が十分に確認できる場合、
-  「判断材料が限られている」「育成前提」などの表現を使用してはいけません。
-
-【評価記号の定義】
-○：直接的かつ職務関連性の高い経験が確認できる  
-△：間接的・汎用的・限定的な関連経験、または育成前提で評価可能  
-×：関連する経験や根拠が一切確認できない  
-
-【出力JSON形式（厳守）】
-{{
-  "score": 0,
-  "criteria": {{
-    "must_have_requirements": "○|△|×",
-    "preferred_requirements": "○|△|×",
-    "role_alignment": "○|△|×"
-  }}
-}}
-
-【スコア算出ルール】
-- score は 0 から 100 の整数で返してください。
-- criteria の評価結果を総合して score を算出してください。
-- ENTRY 求人においては、
-  「△」が多い場合でも score を極端に低く設定してはいけません。
-- 明確な不一致（×）が複数確認される場合のみ、低スコアを検討してください。
-
-【職務内容】
+【Job description】
 {job["job_context"][:1500]}
+
+【Evaluation rules】
+- Use ONLY information explicitly written in the CVs
+- Do NOT assume missing experience
+- ENTRY jobs must NOT penalize lack of experience
+- Be strict but fair
+
+【Output JSON format (strict)】
+{{
+  "criteria": {{
+    "must_have_requirements": "○ | △ | ×",
+    "preferred_requirements": "○ | △ | ×",
+    "role_alignment": "○ | △ | ×"
+  }},
+  "score": 0
+}}
 """
 
+    contents = [prompt, *candidate_files]
 
-
-
-    try:
-        model = genai.GenerativeModel(model_name)
-
-        content_parts = [prompt, *candidate_files]
-        
-        response = model.generate_content(
-            content_parts,
-            generation_config={
-                "temperature": 0.3,
-                "max_output_tokens": 900,
-            }
-        )
-
-        
-        
-        # Log candidate count and content parts
-        if not response.candidates:
-            raise ValueError("Gemini returned no candidates")
-        
-        content_parts = response.candidates[0].content.parts
-        
-        st.caption(
-            f"🧠 Gemini response parts: {len(content_parts)} "
-            f"(includes prompt + {len(candidate_files)} document(s))"
-        )
-        
-        raw = response.text
-        parsed = extract_json(raw)
-        
-        criteria = parsed.get("criteria", {})
-
-        parsed["score"] = calculate_score(
-            criteria=criteria,
-            seniority=job["seniority"]
-        )
-
-
-        # 🔍 Heuristic warning: likely ingestion / readability issue
-        # Case 1: Document likely unreadable
-        if st.session_state.get("total_cv_bytes", 0) < 2000:
-
-            st.warning(
-                "⚠️ The uploaded document may contain little readable text "
-                "(e.g. scanned or image-based PDF)."
-            )
-        
-        # Case 2: Valid evaluation, but no match
-        elif (
-            parsed.get("score", 0) == 0 and
-            all(v == "×" for v in parsed.get("criteria", {}).values())
-        ):
-            st.info(
-                "ℹ️ No matching signals were found for this role. "
-                "This likely reflects a genuine CV–job mismatch."
-            )
-
-
-
-
-
-        return {
-            "ok": True,
-            "data": parsed,
-            "raw": raw
+    response = client.models.generate_content(
+        model=model_name,
+        contents=contents,
+        generation_config={
+            "temperature": 0.3,
+            "max_output_tokens": 400,
         }
+    )
 
-    except Exception as e:
-        return {
-            "ok": False,
-            "error": str(e),
-            "raw": raw if 'raw' in locals() else None,
-            "data": {
-                "score": 0,
-                "criteria": {
-                    "must_have_requirements": "×",
-                    "preferred_requirements": "×",
-                    "role_alignment": "×"
-                }
-            }
-        }
+    raw = response.text
+    parsed = extract_json(raw)
+
+    return {
+        "ok": True,
+        "data": parsed,
+        "raw": raw
+    }
 
 
 
