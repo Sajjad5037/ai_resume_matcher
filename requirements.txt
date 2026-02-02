@@ -1,7 +1,6 @@
-streamlit
-pypdf
-python-docx
-pandas
-openpyxl
 openai
-google-generativeai==0.5.4
+pandas
+streamlit
+python-docx
+pypdf
+openpyxl
