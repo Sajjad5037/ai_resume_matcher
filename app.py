@@ -71,7 +71,8 @@ No text outside JSON.
     
     model = genai.GenerativeModel(model_name)
 
-    content_parts = [prompt, *candidate_files]
+    content_parts = prompt
+
 
     
     response = model.generate_content(
