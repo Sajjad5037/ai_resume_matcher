@@ -9,6 +9,73 @@ import re
 import google.generativeai as genai
 import mimetypes
 
+def generate_full_assessment(candidate_files, job, model_name, candidate_seniority):
+    """
+    Single-pass advisor-style evaluation.
+    CV + JD are read together.
+    Explanation first, score last.
+    UI-compatible output keys.
+    """
+
+    prompt = f"""
+Return ONLY valid JSON.
+No markdown.
+No text outside JSON.
+
+あなたは、キャリアアドバイザー兼採用担当者です。
+以下の履歴書（CV）を丁寧に読み、
+この求人に対して「なぜそう評価したのか」が
+第三者にも分かるように説明してください。
+
+【重要な前提】
+- 評価は書類選考段階のものです。
+- CVに明示的に記載されている内容のみを根拠にしてください。
+- 推測や断定は禁止です。
+- ENTRY求人では経験不足を否定的に扱ってはいけません。
+
+【求人レベル】
+{job["seniority"]}
+
+【候補者レベル】
+{candidate_seniority}
+
+【職務内容】
+{job["job_context"][:1500]}
+
+【出力JSON形式（厳守）】
+{{
+  "SUMMARY": "",
+  "MUST_HAVE": "",
+  "PREFERRED": "",
+  "ALIGNMENT": "",
+  "score": 0
+}}
+
+【各項目の意味】
+- SUMMARY：全体評価（なぜこのような判断になったか）
+- MUST_HAVE：履歴書から確認できる主な強み・評価できる点
+- PREFERRED：現時点で懸念となり得る点や不足している可能性のある要素
+- ALIGNMENT：本求人との役割・期待値の適合性
+
+【スコアについて】
+- 0〜100 の整数で返してください
+- 上記の評価内容と整合する数値にしてください
+"""
+
+    model = genai.GenerativeModel(model_name)
+
+    response = model.generate_content(
+        [prompt, *candidate_files],
+        generation_config={
+            "temperature": 0.3,
+            "max_output_tokens": 1200,
+        }
+    )
+
+    raw = response.text
+    parsed = extract_json(raw)
+    return parsed
+
 def get_display_score(score: int, seniority: str) -> int:
     """
     UI-safe score display.
@@ -793,12 +860,13 @@ if st.session_state.results:
                     st.session_state.explain_open[explain_key] = True
 
                     if explain_key not in st.session_state.explanations:
-                        
-                        st.session_state.explanations[explain_key] = generate_explanation(
+                        st.session_state.explanations[explain_key] = generate_full_assessment(
+                            st.session_state.candidate_files,
                             job,
-                            r,
+                            SELECTED_MODEL,
                             st.session_state.candidate_seniority
                         )
+
 
 
         
