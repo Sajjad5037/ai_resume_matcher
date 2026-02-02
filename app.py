@@ -195,9 +195,7 @@ st.code(available_models)
 # Model Selection
 # ----------------------------
 MODEL_OPTIONS = {
-    "Gemini 1.5 Pro": "models/gemini-1.5-pro",
-    # or
-    "Gemini 1.5 Flash": "models/gemini-1.5-flash",
+    "Gemini 2.5 Pro (Document-capable)": "models/gemini-2.5-pro"
 }
 selected_model_label = st.selectbox(
     "Select AI model",
