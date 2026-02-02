@@ -1,27 +1,52 @@
-# =====================================================
-# Imports
-# =====================================================
-
 import os
-import io
-import re
 import json
 import mimetypes
-
-import streamlit as st
 import pandas as pd
+import streamlit as st
 import google.generativeai as genai
 
+# ----------------------------
+# Gemini Setup
+# ----------------------------
+genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
-# =====================================================
-# UI-safe helpers
-# =====================================================
+# ----------------------------
+# App Config
+# ----------------------------
+st.set_page_config(page_title="AI Resume Matcher", layout="centered")
 
-def get_display_score(score: int, seniority: str) -> int:
-    """UI-safe score display. Does NOT affect AI logic."""
-    if seniority == "ENTRY":
-        return max(score, 25)
-    return score
+st.title("AI Resume Matcher")
+
+st.write(
+    "📌 For best accuracy, upload CVs in DOCX or text-based PDF format. "
+    "Scanned PDFs may reduce matching quality."
+)
+
+# ----------------------------
+# Helpers
+# ----------------------------
+def to_gemini_part(uploaded_file):
+    uploaded_file.seek(0)
+
+    mime_type, _ = mimetypes.guess_type(uploaded_file.name)
+    if uploaded_file.name.lower().endswith(".pdf"):
+        mime_type = "application/pdf"
+
+    if not mime_type:
+        mime_type = uploaded_file.type or "application/octet-stream"
+
+    return {
+        "mime_type": mime_type,
+        "data": uploaded_file.read(),
+    }
+
+
+def extract_json(text):
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        raise ValueError("No valid JSON found")
+    return json.loads(text[start:end + 1])
 
 
 def detect_seniority(job_context: str) -> str:
@@ -39,171 +64,6 @@ def detect_seniority(job_context: str) -> str:
     return "MID"
 
 
-def to_gemini_part(uploaded_file):
-    uploaded_file.seek(0)
-
-    mime_type, _ = mimetypes.guess_type(uploaded_file.name)
-
-    if uploaded_file.name.lower().endswith(".pdf"):
-        mime_type = "application/pdf"
-
-    if not mime_type:
-        mime_type = uploaded_file.type
-
-    return {
-        "mime_type": mime_type,
-        "data": uploaded_file.read(),
-    }
-
-
-# =====================================================
-# Gemini setup
-# =====================================================
-
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-api_key = os.getenv("GOOGLE_API_KEY")
-
-if not api_key:
-    st.error("GOOGLE_API_KEY is NOT loaded. Check Streamlit Secrets.")
-    st.stop()
-
-st.success("Gemini API key loaded successfully.")
-
-
-# =====================================================
-# App config
-# =====================================================
-
-st.set_page_config(
-    page_title="AI Resume Matcher (new)",
-    layout="centered",
-)
-
-if "results" not in st.session_state:
-    st.session_state.results = []
-
-if "explanations" not in st.session_state:
-    st.session_state.explanations = {}
-
-if "explain_open" not in st.session_state:
-    st.session_state.explain_open = {}
-
-if "cvs" not in st.session_state:
-    st.session_state.cvs = None
-
-if "active_candidate" not in st.session_state:
-    st.session_state.active_candidate = None
-
-st.title("AI Resume Matcher (hello)")
-
-
-# =====================================================
-# Model selection
-# =====================================================
-
-try:
-    available_models = [
-        m.name
-        for m in genai.list_models()
-        if "generateContent" in m.supported_generation_methods
-    ]
-except Exception as e:
-    st.error(f"Could not fetch models: {e}")
-    available_models = []
-
-MODEL_OPTIONS = {
-    "Gemini 3 Flash (Preview)": "models/gemini-3-flash-preview"
-}
-
-selected_model_label = st.selectbox(
-    "Select AI model",
-    options=list(MODEL_OPTIONS.keys()),
-    index=0,
-)
-
-SELECTED_MODEL = MODEL_OPTIONS[selected_model_label]
-st.caption(f"Using model: {SELECTED_MODEL}")
-
-
-# =====================================================
-# Instructions
-# =====================================================
-
-st.write("Upload a candidate CV to see which jobs are most likely to result in an offer.")
-st.write(
-    "📌 For best accuracy, upload CVs in DOCX or text-based PDF format. "
-    "Scanned PDFs may reduce matching quality."
-)
-
-
-# =====================================================
-# JSON helpers
-# =====================================================
-
-def extract_json(text: str) -> dict:
-    start = text.find("{")
-    end = text.rfind("}")
-
-    if start == -1 or end == -1 or end <= start:
-        raise ValueError("No valid JSON found")
-
-    return json.loads(text[start:end + 1])
-
-
-def safe_parse_json(text: str) -> dict:
-    return extract_json(text)
-
-
-# =====================================================
-# Candidate seniority detection
-# =====================================================
-
-def detect_candidate_seniority_from_cv(candidate_files):
-    text_hint = ""
-
-    for f in candidate_files:
-        text_hint += f["data"][:8000].decode(errors="ignore")
-
-    senior_signals = ["店長", "マネージャー", "責任者", "統括"]
-    mid_signals = [
-        "役職", "リーダー", "主任", "売上", "実績", "成果",
-        "達成", "年収", "万円", "契約", "案件", "顧客",
-        "営業", "不動産"
-    ]
-
-    if any(k in text_hint for k in senior_signals):
-        return "SENIOR"
-
-    numeric_mid_patterns = [
-        r"[2-9]年",
-        r"[2-9]年目",
-        r"\d{3,4}万円",
-        r"平均年収",
-        r"年収\d{3,4}",
-    ]
-
-    if any(re.search(p, text_hint) for p in numeric_mid_patterns):
-        return "MID"
-
-    if any(k in text_hint for k in mid_signals):
-        return "MID"
-
-    return "ENTRY"
-
-
-# =====================================================
-# Job helpers
-# =====================================================
-
-def get_title(row):
-    for key in ["title", "position"]:
-        if key in row.index:
-            value = row[key]
-            if not pd.isna(value) and str(value).strip():
-                return str(value).strip()
-    return "Unknown Role"
-
-
 def get_available_jobs(df: pd.DataFrame):
     df.columns = df.columns.astype(str).str.strip()
     jobs = []
@@ -212,8 +72,6 @@ def get_available_jobs(df: pd.DataFrame):
         return "" if pd.isna(v) else str(v).strip()
 
     for _, row in df.iterrows():
-        title = get_title(row)
-
         job_context_parts = [
             f"Job Title: {safe(row.get('title'))}",
             f"Position: {safe(row.get('position'))}",
@@ -223,169 +81,120 @@ def get_available_jobs(df: pd.DataFrame):
             f"Job Description: {safe(row.get('job_content'))}",
             f"Required Experience: {safe(row.get('required_experience'))}",
             f"Desired Experience: {safe(row.get('desired_experience'))}",
-            f"Target Candidate: {safe(row.get('target_candidate'))}",
-            f"Education: {safe(row.get('education'))}",
-            f"Eligibility Details: {safe(row.get('eligibility_details'))}",
         ]
 
         job_context = "\n".join(
-            part for part in job_context_parts if part.split(": ", 1)[1]
+            p for p in job_context_parts if p.split(": ", 1)[1]
         )
 
-        seniority = detect_seniority(job_context)
-
         jobs.append({
-            "job_id": safe(row.get("job_url")),
-            "title": title,
+            "title": safe(row.get("title")) or "Unknown Role",
             "job_context": job_context,
-            "seniority": seniority,
+            "seniority": detect_seniority(job_context),
             "company_name": safe(row.get("company_name")),
-            "passrate_for_doc_screening": safe(row.get("passrate_for_doc_screening")),
-            "documents_to_job_offer_ratio": safe(row.get("documents_to_job_offer_ratio")),
-            "fee": safe(row.get("fee")),
         })
 
     return jobs
 
 
-# =====================================================
-# Scoring
-# =====================================================
+# ----------------------------
+# AI Core
+# ----------------------------
+def generate_full_assessment(candidate_files, job, model_name, candidate_seniority):
+    prompt = f"""
+Return ONLY valid JSON.
+No markdown.
+No text outside JSON.
 
-def calculate_score(criteria: dict, seniority: str) -> int:
-    weights = {"○": 1.0, "△": 0.6, "×": 0.0}
+あなたは、キャリアアドバイザー兼採用担当者です。
+以下の履歴書（CV）を丁寧に読み、
+この求人に対して「なぜそう評価したのか」が
+第三者にも分かるように説明してください。
 
-    raw = (
-        weights.get(criteria.get("must_have_requirements"), 0) * 0.4
-        + weights.get(criteria.get("preferred_requirements"), 0) * 0.3
-        + weights.get(criteria.get("role_alignment"), 0) * 0.3
-    )
+【重要な前提】
+- 評価は書類選考段階のものです
+- CVに明示的に記載されている内容のみを根拠にしてください
+- 推測や断定は禁止です
+- ENTRY求人では経験不足を否定的に扱ってはいけません
 
-    score = int(raw * 100)
+【求人レベル】
+{job["seniority"]}
 
-    if seniority == "ENTRY":
-        score = max(score, 35)
-    elif seniority == "MID":
-        score = max(score, 20)
-    elif seniority == "SENIOR":
-        score = max(score, 10)
-
-    return min(score, 100)
-
-
-# =====================================================
-# AI matching
-# =====================================================
-
-def ai_match_job(candidate_files, job, model_name, candidate_seniority):
-    total_bytes = sum(len(f["data"]) for f in candidate_files)
-
-    prompt = f"""Return ONLY valid JSON. No markdown. No explanations. No text outside JSON.
-All string values MUST be single-line.
-
-あなたは、書類選考を担当する採用実務者です。
-
-【求人レベル】 {job['seniority']}
-【候補者レベル】 {candidate_seniority}
-
-【評価ルール】
-○：明確な直接経験
-△：間接・限定的経験
-×：根拠なし
-
-【出力形式】
-{{"score":0,"criteria":{{"must_have_requirements":"○|△|×","preferred_requirements":"○|△|×","role_alignment":"○|△|×"}}}}
+【候補者レベル】
+{candidate_seniority}
 
 【職務内容】
 {job["job_context"][:1500]}
+
+【出力JSON形式（厳守）】
+{{
+  "SUMMARY": "",
+  "MUST_HAVE": "",
+  "PREFERRED": "",
+  "ALIGNMENT": "",
+  "score": 0
+}}
 """
 
-    try:
-        model = genai.GenerativeModel(model_name)
+    model = genai.GenerativeModel(model_name)
 
-        response = model.generate_content(
-            [prompt, *candidate_files],
-            generation_config={"temperature": 0.3, "max_output_tokens": 900},
-        )
+    contents = [prompt, *candidate_files]
 
-        raw = response.text
-        parsed = extract_json(raw)
-
-        parsed["score"] = calculate_score(parsed["criteria"], job["seniority"])
-
-        if total_bytes < 2000:
-            st.warning("⚠️ The uploaded document may contain little readable text.")
-
-        return {"ok": True, "data": parsed, "raw": raw}
-
-    except Exception as e:
-        return {
-            "ok": False,
-            "error": str(e),
-            "raw": None,
-            "data": {
-                "score": 0,
-                "criteria": {
-                    "must_have_requirements": "×",
-                    "preferred_requirements": "×",
-                    "role_alignment": "×",
-                },
-            },
+    response = model.generate_content(
+        contents,
+        generation_config={
+            "temperature": 0.3,
+            "max_output_tokens": 900,
         }
+    )
+
+    return extract_json(response.text)
 
 
-# =====================================================
+# ----------------------------
 # UI
-# =====================================================
-
+# ----------------------------
 uploaded_cvs = st.file_uploader(
-    "Upload CV files (PDF / DOCX / XLSX)",
-    type=["pdf", "docx", "xlsx"],
-    accept_multiple_files=True,
+    "Upload CV files (PDF / DOCX)",
+    type=["pdf", "docx"],
+    accept_multiple_files=True
 )
 
 jobs_file = st.file_uploader(
     "Upload jobs Excel file",
-    type=["xlsx"],
+    type=["xlsx"]
 )
 
-if uploaded_cvs:
-    st.success("CV files uploaded")
-    st.session_state.cvs = uploaded_cvs
-    st.info(f"{len(uploaded_cvs)} CVs uploaded")
+MODEL_NAME = "models/gemini-1.5-pro-001"
 
 if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
     jobs_df = pd.read_excel(jobs_file)
     jobs = get_available_jobs(jobs_df)
 
     candidate_files = []
-    for f in st.session_state.cvs:
+    for f in uploaded_cvs:
         candidate_files.append(to_gemini_part(f))
 
-    candidate_seniority = detect_candidate_seniority_from_cv(candidate_files)
+    candidate_seniority = "ENTRY"  # intentionally fixed (your original logic)
 
-    results = []
+    st.subheader("📊 Results")
 
     for job in jobs:
-        result = ai_match_job(candidate_files, job, SELECTED_MODEL, candidate_seniority)
-        results.append({
-            "job": job,
-            "score": result["data"]["score"],
-            "criteria": result["data"]["criteria"],
-        })
-
-    results.sort(key=lambda x: x["score"], reverse=True)
-    st.session_state.results = results
-
-    st.success("Evaluation completed")
-
-if st.session_state.results:
-    st.subheader("CV Evaluation Results")
-
-    for r in st.session_state.results:
-        job = r["job"]
-        score = get_display_score(r["score"], job["seniority"])
+        result = generate_full_assessment(
+            candidate_files,
+            job,
+            MODEL_NAME,
+            candidate_seniority
+        )
 
         st.markdown(f"### {job['title']}")
-        st.write(f"**Estimated Offer Probability:** {score}%")
+        st.write(f"**Score:** {result['score']}%")
+        st.write("**Summary**")
+        st.write(result["SUMMARY"])
+        st.write("**Must Have**")
+        st.write(result["MUST_HAVE"])
+        st.write("**Preferred**")
+        st.write(result["PREFERRED"])
+        st.write("**Alignment**")
+        st.write(result["ALIGNMENT"])
         st.divider()
