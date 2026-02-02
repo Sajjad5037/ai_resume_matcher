@@ -7,7 +7,13 @@ import json
 #from openai import OpenAI
 import re
 import google.generativeai as genai
+from google.generativeai.types import Part
+
 import mimetypes
+st.write(
+    "📌 For best accuracy, upload CVs in DOCX or text-based PDF format. "
+    "Scanned PDFs may reduce matching quality."
+)
 
 
 def generate_full_assessment(candidate_files, job, model_name, candidate_seniority):
@@ -117,10 +123,10 @@ def to_gemini_part(uploaded_file):
     if not mime_type:
         mime_type = uploaded_file.type or "application/octet-stream"
 
-    return {
-        "mime_type": mime_type,
-        "data": uploaded_file.read(),
-    }
+    return Part.from_bytes(
+        data=uploaded_file.read(),
+        mime_type=mime_type,
+    )
 
  
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
@@ -188,7 +194,7 @@ st.code(available_models)
 # Model Selection
 # ----------------------------
 MODEL_OPTIONS = {
-    "Gemini 2.5 Pro (Document-capable)": "models/gemini-2.5-pro"
+    "Gemini 1.5 Pro (Document-capable)": "models/gemini-1.5-pro-latest"
 }
 selected_model_label = st.selectbox(
     "Select AI model",
@@ -498,7 +504,8 @@ def calculate_score(criteria: dict, seniority: str) -> int:
 
 def ai_match_job(candidate_files, job, model_name, candidate_seniority):
 
-    total_bytes = 0  # cannot inspect bytes from Part safely
+    
+
 
     
 
@@ -622,7 +629,8 @@ CVに明示的に記載されている内容のみを根拠として評価して
 
         # 🔍 Heuristic warning: likely ingestion / readability issue
         # Case 1: Document likely unreadable
-        if total_bytes < 2000:
+        if st.session_state.get("total_cv_bytes", 0) < 2000:
+
             st.warning(
                 "⚠️ The uploaded document may contain little readable text "
                 "(e.g. scanned or image-based PDF)."
@@ -671,8 +679,8 @@ CVに明示的に記載されている内容のみを根拠として評価して
 # UI
 # ----------------------------
 uploaded_cvs = st.file_uploader(
-    "Upload CV files (PDF / DOCX / XLSX)",
-    type=["pdf", "docx", "xlsx"],
+    "Upload CV files (PDF / DOCX)",
+    type=["pdf", "docx"],
     accept_multiple_files=True,
     key="cv_files"
 )
@@ -704,11 +712,12 @@ if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
 
     # 🔹 Aggregate ALL CVs into ONE candidate
     candidate_files = []
-    
+    total_bytes = 0
 
     st.subheader("📎 Document ingestion log")
 
     for f in st.session_state.cvs:
+        total_bytes += f.size
         part = to_gemini_part(f)
         candidate_files.append(part)
     
@@ -722,6 +731,7 @@ if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
         )
 
 
+    st.session_state.total_cv_bytes = total_bytes
 
     cv_files = [f.name for f in st.session_state.cvs]
     candidate_seniority = detect_candidate_seniority_from_cv(candidate_files)
