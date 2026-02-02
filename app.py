@@ -76,9 +76,10 @@ No text outside JSON.
 
 
     response = client.models.generate_content(
-        "models/gemini-1.5-flash",
-        contents
+        model="models/gemini-1.5-flash",
+        contents=contents
     )
+
 
     
 
@@ -126,8 +127,8 @@ client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 def test_gemini_text_only():
     response = client.models.generate_content(
-        "models/gemini-1.5-flash",
-        ["Say OK"]
+        model="models/gemini-1.5-flash",
+        contents=["Say OK"]
     )
     st.write("Gemini test response:", response.text)
 
@@ -260,13 +261,14 @@ Do not add extra keys.
 
     
     response = client.models.generate_content(
-        "models/gemini-1.5-flash",
-        contents
+        model="models/gemini-1.5-flash",
+        contents=contents
     )
 
 
     try:
-        result = extract_json(response.text)
+        result = extract_json(response.text or "")
+
 
         # 🔍 DEBUG: confirm level pairing
         
@@ -481,9 +483,10 @@ You are screening a candidate at the document-review stage.
 
 
     response = client.models.generate_content(
-        "models/gemini-1.5-flash",
-        contents
+        model="models/gemini-1.5-flash",
+        contents=contents
     )
+
 
 
     raw = response.text or ""
