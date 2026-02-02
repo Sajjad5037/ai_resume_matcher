@@ -8,7 +8,7 @@ import json
 import re
 import google.generativeai as genai
 import mimetypes
-from google.generativeai.types import Part
+
 
 def generate_full_assessment(candidate_files, job, model_name, candidate_seniority):
     """
@@ -117,10 +117,10 @@ def to_gemini_part(uploaded_file):
     if not mime_type:
         mime_type = uploaded_file.type or "application/octet-stream"
 
-    return Part.from_bytes(
-        data=uploaded_file.read(),
-        mime_type=mime_type,
-    )
+    return {
+        "mime_type": mime_type,
+        "data": uploaded_file.read(),
+    }
 
  
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
