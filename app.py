@@ -8,6 +8,7 @@ import json
 import re
 import google.generativeai as genai
 import mimetypes
+from google.generativeai.types import Part
 
 def generate_full_assessment(candidate_files, job, model_name, candidate_seniority):
     """
@@ -64,13 +65,8 @@ No text outside JSON.
     
     model = genai.GenerativeModel(model_name)
 
-    content_parts = [prompt]
+    content_parts = [prompt, *candidate_files]
 
-    for f in candidate_files:
-        content_parts.append({
-            "mime_type": f["mime_type"],
-            "data": f["data"],
-        })
     
     response = model.generate_content(
         content_parts,
@@ -113,21 +109,18 @@ def detect_seniority(job_context: str) -> str:
 def to_gemini_part(uploaded_file):
     uploaded_file.seek(0)
 
-    # Guess MIME type from filename (more reliable than browser)
     mime_type, _ = mimetypes.guess_type(uploaded_file.name)
 
-    # Hard fallback for PDFs
     if uploaded_file.name.lower().endswith(".pdf"):
         mime_type = "application/pdf"
 
-    # Final fallback (rare)
     if not mime_type:
-        mime_type = uploaded_file.type
+        mime_type = uploaded_file.type or "application/octet-stream"
 
-    return {
-        "mime_type": mime_type,
-        "data": uploaded_file.read(),
-    }
+    return Part.from_bytes(
+        data=uploaded_file.read(),
+        mime_type=mime_type,
+    )
 
  
 genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
@@ -415,41 +408,8 @@ def extract_json(text):
 # Helpers
 # ----------------------------
 def detect_candidate_seniority_from_cv(candidate_files):
-    text_hint = ""
-    for f in candidate_files:
-        text_hint += f["data"][:8000].decode(errors="ignore")
-
-    # Strong MID / SENIOR signals (numbers + responsibility)
-    mid_signals = [
-        "役職", "リーダー", "主任",
-        "売上", "実績", "成果", "達成",
-        "年収", "万円",
-        "契約", "案件", "顧客",
-        "営業", "不動産"
-    ]
-
-
-    senior_signals = [
-        "店長", "マネージャー", "責任者", "統括"
-    ]
-
-    if any(k in text_hint for k in senior_signals):
-        return "SENIOR"
-
-    numeric_mid_patterns = [
-        r"[2-9]年",
-        r"[2-9]年目",
-        r"\d{3,4}万円",
-        r"平均年収",
-        r"年収\d{3,4}",
-    ]
-
-    
-    if any(re.search(p, text_hint) for p in numeric_mid_patterns):
-        return "MID"
-    
-    if any(k in text_hint for k in mid_signals):
-        return "MID"
+    # Document-based seniority inference is intentionally disabled
+    # because we rely on Gemini's internal document understanding.
     return "ENTRY"
 
 
@@ -538,7 +498,8 @@ def calculate_score(criteria: dict, seniority: str) -> int:
 
 def ai_match_job(candidate_files, job, model_name, candidate_seniority):
 
-    total_bytes = sum(len(f["data"]) for f in candidate_files)
+    total_bytes = 0  # cannot inspect bytes from Part safely
+
     
 
     
@@ -625,13 +586,7 @@ CVに明示的に記載されている内容のみを根拠として評価して
     try:
         model = genai.GenerativeModel(model_name)
 
-        content_parts = [prompt]
-
-        for f in candidate_files:
-            content_parts.append({
-                "mime_type": f["mime_type"],
-                "data": f["data"],
-            })
+        content_parts = [prompt, *candidate_files]
         
         response = model.generate_content(
             content_parts,
@@ -760,11 +715,12 @@ if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
         st.code(
             {
                 "filename": f.name,
-                "detected_mime_type": part["mime_type"],
-                "file_size_kb": round(len(part["data"]) / 1024, 2),
+                "detected_mime_type": mimetypes.guess_type(f.name)[0],
+                "file_size_kb": round(f.size / 1024, 2),
             },
             language="json"
         )
+
 
 
     cv_files = [f.name for f in st.session_state.cvs]
