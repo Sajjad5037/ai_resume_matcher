@@ -194,7 +194,7 @@ st.code(available_models)
 # Model Selection
 # ----------------------------
 MODEL_OPTIONS = {
-    "Gemini 1.5 Pro": "models/gemini-1.5-pro"
+    "Gemini 1.5 Pro (stable)": "models/gemini-1.5-pro-001"
 }
 
 selected_model_label = st.selectbox(
