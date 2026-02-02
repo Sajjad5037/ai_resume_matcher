@@ -4,23 +4,25 @@ import streamlit as st
 import pandas as pd
 
 from google import genai
+from google.genai import types
+
 from pypdf import PdfReader
 from docx import Document
 
-# ------------------------
+# -------------------------------------------------
 # CONFIG
-# ------------------------
+# -------------------------------------------------
 MODEL_NAME = "models/gemini-1.5-flash"
+CHUNK_SIZE = 4000  # safe chunk size for Gemini
 client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 st.set_page_config(page_title="AI Resume Matcher – MVP", layout="centered")
 st.title("AI Resume Matcher – MVP")
 
-# ------------------------
-# HELPERS
-# ------------------------
+# -------------------------------------------------
+# FILE TEXT EXTRACTION
+# -------------------------------------------------
 def extract_text(file) -> str:
-    """Convert CV file into plain text (no AI, no logic)."""
     if file.type == "application/pdf":
         reader = PdfReader(file)
         return "\n".join(page.extract_text() or "" for page in reader.pages)
@@ -31,28 +33,62 @@ def extract_text(file) -> str:
 
     return ""
 
+# -------------------------------------------------
+# UTILS
+# -------------------------------------------------
+def chunk_text(text: str, size: int = CHUNK_SIZE):
+    return [text[i:i + size] for i in range(0, len(text), size)]
+
 def extract_json(text: str) -> dict:
     start = text.find("{")
     end = text.rfind("}")
     if start == -1 or end == -1:
-        raise ValueError("No JSON returned by model")
+        raise ValueError("No JSON found in model output")
     return json.loads(text[start:end + 1])
 
-# ------------------------
-# STEP 1: BUILD CANDIDATE PROFILE (AI)
-# ------------------------
-def build_candidate_profile(cv_text: str) -> dict:
+# -------------------------------------------------
+# STEP 1: SUMMARIZE CV CHUNKS
+# -------------------------------------------------
+def summarize_cv_chunk(chunk: str) -> dict:
     prompt = f"""
 Return ONLY valid JSON.
-No markdown.
-No text outside JSON.
+No markdown. No explanations.
 
-The following text contains MULTIPLE CVs belonging to the SAME candidate.
+Summarize the CV text below using ONLY what is written.
 
-CV TEXT:
-{cv_text}
+Text:
+{chunk}
 
-Create a unified candidate profile using ONLY what is written.
+Output format:
+{{
+  "summary": "",
+  "skills": []
+}}
+"""
+    response = client.models.generate_content(
+        model=MODEL_NAME,
+        contents=[prompt]
+    )
+    return extract_json(response.text or "")
+
+# -------------------------------------------------
+# STEP 2: BUILD FINAL CANDIDATE PROFILE
+# -------------------------------------------------
+def build_candidate_profile(full_cv_text: str) -> dict:
+    chunks = chunk_text(full_cv_text)
+
+    partial_summaries = []
+    for c in chunks:
+        partial_summaries.append(summarize_cv_chunk(c))
+
+    merge_prompt = f"""
+Return ONLY valid JSON.
+No markdown. No explanations.
+
+Merge the following partial CV summaries into ONE candidate profile.
+
+Partial summaries:
+{json.dumps(partial_summaries, ensure_ascii=False)}
 
 Output format:
 {{
@@ -61,22 +97,20 @@ Output format:
   "experience_level": "ENTRY | MID | SENIOR"
 }}
 """
-
     response = client.models.generate_content(
         model=MODEL_NAME,
-        contents=[prompt]
+        contents=[merge_prompt]
     )
-
     return extract_json(response.text or "")
 
-# ------------------------
-# STEP 2: SCORE ONE JOB (AI)
-# ------------------------
+# -------------------------------------------------
+# STEP 3: SCORE ONE JOB
+# -------------------------------------------------
 def score_job(candidate_profile: dict, job_text: str) -> dict:
     prompt = f"""
 Return ONLY valid JSON.
 
-You are evaluating job fit at document screening stage.
+Evaluate job fit at document screening stage.
 
 Candidate profile:
 {json.dumps(candidate_profile, ensure_ascii=False)}
@@ -94,17 +128,15 @@ Output format:
   "reason": ""
 }}
 """
-
     response = client.models.generate_content(
         model=MODEL_NAME,
         contents=[prompt]
     )
-
     return extract_json(response.text or "")
 
-# ------------------------
+# -------------------------------------------------
 # UI
-# ------------------------
+# -------------------------------------------------
 uploaded_cvs = st.file_uploader(
     "Upload candidate CVs (PDF / DOCX)",
     type=["pdf", "docx"],
@@ -118,45 +150,55 @@ jobs_file = st.file_uploader(
 
 if uploaded_cvs and jobs_file and st.button("Run Evaluation"):
 
-    # ---- CV INGESTION ----
-    with st.spinner("Reading CV documents…"):
-        cv_text = ""
+    # ----------------------------
+    # READ CVs
+    # ----------------------------
+    with st.spinner("Reading CVs..."):
+        all_cv_text = ""
         for f in uploaded_cvs:
-            cv_text += extract_text(f) + "\n\n"
+            all_cv_text += extract_text(f) + "\n\n"
 
-    if not cv_text.strip():
+    if not all_cv_text.strip():
         st.error("No readable text found in CVs.")
         st.stop()
 
-    # ---- CANDIDATE PROFILE ----
-    with st.spinner("Building candidate profile…"):
-        candidate_profile = build_candidate_profile(cv_text)
+    # ----------------------------
+    # BUILD CANDIDATE PROFILE
+    # ----------------------------
+    with st.spinner("Building candidate profile..."):
+        candidate_profile = build_candidate_profile(all_cv_text)
 
     st.subheader("🧠 Candidate Profile")
     st.json(candidate_profile)
 
-    # ---- JOB SCORING ----
+    # ----------------------------
+    # READ JOBS
+    # ----------------------------
     jobs_df = pd.read_excel(jobs_file)
+
     results = []
 
-    with st.spinner("Scoring jobs…"):
+    with st.spinner("Scoring jobs..."):
         for _, row in jobs_df.iterrows():
             job_text = "\n".join(
                 str(v) for v in row.values if pd.notna(v)
             )
 
-            result = score_job(candidate_profile, job_text)
+            job_result = score_job(candidate_profile, job_text)
 
             results.append({
                 "Job": row.get("title", "Unknown"),
-                "Score": result["score"],
-                "Reason": result["reason"]
+                "Score": job_result["score"],
+                "Reason": job_result["reason"]
             })
 
     results.sort(key=lambda x: x["Score"], reverse=True)
 
-    # ---- OUTPUT ----
-    st.subheader("📊 Results")
+    # ----------------------------
+    # DISPLAY RESULTS
+    # ----------------------------
+    st.subheader("📊 Job Match Results")
+
     for r in results:
         st.markdown(f"### {r['Job']}")
         st.write(f"**Score:** {r['Score']}%")
