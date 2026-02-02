@@ -187,6 +187,9 @@ try:
 except Exception as e:
     st.error(f"Could not fetch models: {e}")
     available_models = []
+st.subheader("✅ Available Gemini models for this project")
+st.code(available_models)
+
 
 # ----------------------------
 # Model Selection
