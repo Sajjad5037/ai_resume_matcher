@@ -8,7 +8,7 @@ import json
 import re
 import google.generativeai as genai
 import mimetypes
-
+from google.generativeai.types import Part
 def generate_full_assessment(candidate_files, job, model_name, candidate_seniority):
     """
     Single-pass advisor-style evaluation.
@@ -64,8 +64,18 @@ No text outside JSON.
 
     model = genai.GenerativeModel(model_name)
 
+    content_parts = [prompt]
+
+    for f in candidate_files:
+        content_parts.append(
+            Part.from_bytes(
+                data=f["data"],
+                mime_type=f["mime_type"]
+            )
+        )
+    
     response = model.generate_content(
-        [prompt, *candidate_files],
+        content_parts,
         generation_config={
             "temperature": 0.3,
             "max_output_tokens": 1200,
