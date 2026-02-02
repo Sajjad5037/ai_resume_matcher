@@ -69,7 +69,11 @@ No text outside JSON.
 - 上記の評価内容と整合する数値にしてください
 """
     
-    contents = [prompt, *candidate_files]
+    contents = [
+        types.Part.from_text(prompt),
+        *candidate_files
+    ]
+
 
     response = client.models.generate_content(
         model=model_name,
@@ -262,9 +266,14 @@ Do not add extra keys.
 {job["job_context"][:1200]}
 """
 
+    contents = [
+        types.Part.from_text(prompt),
+        *st.session_state.candidate_files
+    ]
+    
     response = client.models.generate_content(
         model=SELECTED_MODEL,
-        contents=prompt,
+        contents=contents,
         generation_config={
             "temperature": 0.3,
             "max_output_tokens": 900
@@ -272,8 +281,10 @@ Do not add extra keys.
     )
 
 
+
     try:
-        result = safe_parse_json(response.text)
+        result = extract_json(response.text)
+
         # 🔍 DEBUG: confirm level pairing
         
         # 🚨 HARD OVERRIDE: ENTRY job + non-ENTRY candidate
@@ -478,7 +489,11 @@ You are screening a candidate at the document-review stage.
 }}
 """
 
-    contents = [prompt, *candidate_files]
+    contents = [
+        types.Part.from_text(prompt),
+        *candidate_files
+    ]
+
 
     response = client.models.generate_content(
         model=model_name,
