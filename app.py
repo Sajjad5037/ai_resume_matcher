@@ -6,7 +6,7 @@ import pandas as pd
 import json 
 #from openai import OpenAI
 import re
-import google.generativeai as genai
+#import google.generativeai as genai
 
 
 import mimetypes
@@ -129,13 +129,16 @@ def to_gemini_part(uploaded_file):
     }
 
  
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
+from google import genai
 
-api_key = os.getenv("GOOGLE_API_KEY")
+client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
-if not api_key:
-    st.error("GOOGLE_API_KEY is NOT loaded. Check Streamlit Secrets.")
-    st.stop()
+def test_gemini_text_only():
+    response = client.models.generate_content(
+        model="models/gemini-2.0-flash",
+        contents="Say OK"
+    )
+    st.write("Gemini test response:", response.text)
 
 
 
@@ -174,6 +177,8 @@ st.success("Gemini API key loaded successfully.")
 
 
 st.title("AI Resume Matcher (hello)")
+test_gemini_text_only()
+st.stop()
 
 
 
