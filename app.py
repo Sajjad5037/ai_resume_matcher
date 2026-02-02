@@ -78,10 +78,11 @@ No text outside JSON.
     response = client.models.generate_content(
         model=model_name,
         contents=contents,
-        generation_config={
-            "temperature": 0.3,
-            "max_output_tokens": 900,
-        }
+        generation_config=types.GenerationConfig(
+            temperature=0.3,
+            max_output_tokens=400,
+        )
+
     )
 
     raw = response.text
@@ -275,10 +276,11 @@ Do not add extra keys.
     response = client.models.generate_content(
         model=SELECTED_MODEL,
         contents=contents,
-        generation_config={
-            "temperature": 0.3,
-            "max_output_tokens": 900
-        }
+        generation_config=types.GenerationConfig(
+            temperature=0.3,
+            max_output_tokens=400,
+        )
+
     )
 
 
@@ -501,10 +503,11 @@ You are screening a candidate at the document-review stage.
     response = client.models.generate_content(
         model=model_name,
         contents=contents,
-        generation_config={
-            "temperature": 0.3,
-            "max_output_tokens": 400,
-        }
+        generation_config=types.GenerationConfig(
+            temperature=0.3,
+            max_output_tokens=400,
+        )
+
     )
 
     raw = response.text
