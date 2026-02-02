@@ -8,7 +8,7 @@ import json
 import re
 import google.generativeai as genai
 import mimetypes
-from google.generativeai.types import Part
+
 def generate_full_assessment(candidate_files, job, model_name, candidate_seniority):
     """
     Single-pass advisor-style evaluation.
@@ -61,26 +61,25 @@ No text outside JSON.
 - 0〜100 の整数で返してください
 - 上記の評価内容と整合する数値にしてください
 """
-
+    
     model = genai.GenerativeModel(model_name)
 
     content_parts = [prompt]
 
     for f in candidate_files:
-        content_parts.append(
-            Part.from_bytes(
-                data=f["data"],
-                mime_type=f["mime_type"]
-            )
-        )
+        content_parts.append({
+            "mime_type": f["mime_type"],
+            "data": f["data"],
+        })
     
     response = model.generate_content(
         content_parts,
         generation_config={
             "temperature": 0.3,
-            "max_output_tokens": 1200,
+            "max_output_tokens": 900,
         }
     )
+
 
     raw = response.text
     parsed = extract_json(raw)
@@ -623,13 +622,22 @@ CVに明示的に記載されている内容のみを根拠として評価して
     try:
         model = genai.GenerativeModel(model_name)
 
+        content_parts = [prompt]
+
+        for f in candidate_files:
+            content_parts.append({
+                "mime_type": f["mime_type"],
+                "data": f["data"],
+            })
+        
         response = model.generate_content(
-           [prompt, *candidate_files],
-           generation_config={
-               "temperature": 0.3,
-               "max_output_tokens": 900,
-           }
-       )
+            content_parts,
+            generation_config={
+                "temperature": 0.3,
+                "max_output_tokens": 900,
+            }
+        )
+
         
         
         # Log candidate count and content parts
