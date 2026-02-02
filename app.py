@@ -193,8 +193,9 @@ st.code(available_models)
 # Model Selection
 # ----------------------------
 MODEL_OPTIONS = {
-    "Gemini 1.5 Pro (Document-capable)": "models/gemini-1.5-pro-latest"
+    "Gemini 1.5 Pro": "models/gemini-1.5-pro"
 }
+
 selected_model_label = st.selectbox(
     "Select AI model",
     options=list(MODEL_OPTIONS.keys()),
