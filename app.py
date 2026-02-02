@@ -70,8 +70,8 @@ No text outside JSON.
 """
     
     contents = [
-        types.Part.from_text(prompt),
-        *candidate_files
+        prompt,          # plain string prompt
+        *candidate_files # CVs as types.Part.from_bytes(...)
     ]
 
 
@@ -267,9 +267,10 @@ Do not add extra keys.
 """
 
     contents = [
-        types.Part.from_text(prompt),
+        prompt,
         *st.session_state.candidate_files
     ]
+
     
     response = client.models.generate_content(
         model=SELECTED_MODEL,
@@ -490,9 +491,11 @@ You are screening a candidate at the document-review stage.
 """
 
     contents = [
-        types.Part.from_text(prompt),
+        prompt,
         *candidate_files
     ]
+
+
 
 
     response = client.models.generate_content(
