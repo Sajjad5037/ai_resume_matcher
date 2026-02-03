@@ -265,7 +265,8 @@ jobs_file = st.file_uploader(
     type=["xlsx"]
 )
 
-MODEL_NAME = "gemini-1.5-pro"
+MODEL_NAME = "gemini-pro"
+
 
 
 if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
