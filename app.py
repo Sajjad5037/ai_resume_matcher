@@ -265,7 +265,8 @@ jobs_file = st.file_uploader(
     type=["xlsx"]
 )
 
-MODEL_NAME = "gemini-pro"
+MODEL_NAME = "gemini-2.5-flash"
+
 
 
 
