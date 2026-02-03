@@ -148,6 +148,10 @@ def get_available_jobs(df: pd.DataFrame):
 def generate_full_assessment(candidate_files, job, model_name, candidate_seniority):
     
     prompt = f"""
+You MUST output a COMPLETE and VALID JSON object.
+If you cannot finish, DO NOT start the response.
+Do not omit closing braces.
+
 Return ONLY valid JSON.
 No markdown.
 No text outside JSON.
@@ -181,6 +185,11 @@ No text outside JSON.
 - 歓迎要件と経歴の適合性（加点要素）
 - 職務内容全体との整合性
 - 上記を踏まえた書類通過の現実的可能性
+
+IMPORTANT:
+- The JSON must start with {{ and end with }}
+- Do not truncate output
+- Do not stop mid-sentence
 
 【出力JSON形式（厳守）】
 {{
