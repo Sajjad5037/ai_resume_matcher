@@ -176,6 +176,15 @@ def get_available_jobs(df: pd.DataFrame):
 # AI Core
 # ----------------------------
 def generate_full_assessment(candidate_files, job, model_name, candidate_seniority):
+    st.divider()
+    st.subheader("🤖 Gemini Evaluation Call")
+
+    st.write("Model name:", model_name)
+    st.write("Candidate seniority:", candidate_seniority)
+    st.write("Job title:", job["title"])
+    st.write("Job seniority:", job["seniority"])
+    st.write("Prompt length:", len(prompt))
+    st.write("Number of attached CV files:", len(candidate_files))
     prompt = f"""
 Return ONLY valid JSON.
 No markdown.
@@ -225,14 +234,20 @@ No text outside JSON.
 
     contents = [prompt, *candidate_files]
 
-    response = model.generate_content(
-        contents,
-        generation_config={
-            "temperature": 0.3,
-            "max_output_tokens": 900,
-        }
-
-    )
+    try:
+        response = model.generate_content(
+            contents,
+            generation_config={
+                "temperature": 0.3,
+                "max_output_tokens": 900,
+            }
+        )
+    except Exception as e:
+        st.error("❌ Gemini API call failed")
+        st.write("Model:", model_name)
+        st.write("Job:", job["title"])
+        st.code(repr(e))
+        raise
 
     return extract_json(response.text)
 
@@ -250,7 +265,8 @@ jobs_file = st.file_uploader(
     type=["xlsx"]
 )
 
-MODEL_NAME = "models/gemini-1.5-pro-001"
+MODEL_NAME = "gemini-1.5-pro"
+
 
 if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
     jobs_df = pd.read_excel(jobs_file)
