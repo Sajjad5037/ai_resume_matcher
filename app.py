@@ -25,30 +25,102 @@ st.write(
 # ----------------------------
 # Helpers
 # ----------------------------
-def to_gemini_part(uploaded_file):
-    uploaded_file.seek(0)
+def to_gemini_part(uploaded_file, debug=True):
+    if debug:
+        st.divider()
+        st.subheader("📄 Attaching CV to Gemini")
 
-    mime_type, _ = mimetypes.guess_type(uploaded_file.name)
+    # Basic file info
+    if debug:
+        st.write("Filename:", uploaded_file.name)
+        st.write("Streamlit MIME:", uploaded_file.type)
+
+    # Reset pointer
+    try:
+        uploaded_file.seek(0)
+        if debug:
+            st.success("File pointer reset")
+    except Exception as e:
+        st.error("❌ Failed to reset file pointer")
+        st.code(repr(e))
+        raise
+
+    # Resolve MIME
+    mime_type, encoding = mimetypes.guess_type(uploaded_file.name)
+
     if uploaded_file.name.lower().endswith(".pdf"):
         mime_type = "application/pdf"
+        if debug:
+            st.info("PDF detected → forcing application/pdf")
 
     if not mime_type:
         mime_type = uploaded_file.type or "application/octet-stream"
+        if debug:
+            st.warning("MIME guess failed → using fallback")
+
+    if debug:
+        st.write("Final MIME:", mime_type)
+
+    # Read bytes
+    data = uploaded_file.read()
+
+    if debug:
+        st.write("File size (bytes):", len(data))
+
+    if not data:
+        st.error("❌ CV file is EMPTY (0 bytes). Aborting.")
+        raise ValueError(f"CV '{uploaded_file.name}' is empty")
+
+    if debug:
+        st.success("CV attached successfully")
 
     return {
-        "mime_type": mime_type,
-        "data": uploaded_file.read(),
+        "inline_data": {
+            "mime_type": mime_type,
+            "data": data,
+        }
     }
 
+#because ai output is consistent so we are making sure
+def extract_json(text, debug=True): 
+    if debug:
+        st.divider()
+        st.subheader("🧩 Parsing AI JSON Response")
 
-def extract_json(text):
+    if debug:
+        st.write("Raw response length:", len(text))
+        st.write("Raw response preview:")
+        st.code(text[:2000])  # prevent UI overload
+
     start = text.find("{")
     end = text.rfind("}")
+
     if start == -1 or end == -1 or end <= start:
-        raise ValueError("No valid JSON found")
-    return json.loads(text[start:end + 1])
+        st.error("❌ No valid JSON boundaries found in AI response")
+        if debug:
+            st.write("First '{' index:", start)
+            st.write("Last '}' index:", end)
+        raise ValueError("No valid JSON found in AI response")
 
+    json_str = text[start:end + 1]
 
+    if debug:
+        st.success("JSON boundaries detected")
+        st.write("Extracted JSON preview:")
+        st.code(json_str[:2000])
+
+    try:
+        return json.loads(json_str)
+    except json.JSONDecodeError as e:
+        st.error("❌ JSON parsing failed")
+        if debug:
+            st.write("JSON decode error:")
+            st.code(repr(e))
+            st.write("Full extracted JSON:")
+            st.code(json_str)
+        raise
+
+#here
 def detect_seniority(job_context: str) -> str:
     keywords_entry = ["未経験OK", "経験不問", "第二新卒"]
     keywords_senior = ["3年以上", "5年以上", "リード", "マネージャー"]
@@ -73,19 +145,22 @@ def get_available_jobs(df: pd.DataFrame):
 
     for _, row in df.iterrows():
         job_context_parts = [
-            f"Job Title: {safe(row.get('title'))}",
-            f"Position: {safe(row.get('position'))}",
-            f"Industry: {safe(row.get('job_industry'))}",
-            f"Job Type: {safe(row.get('job_type'))}",
-            f"Location: {safe(row.get('location'))}",
-            f"Job Description: {safe(row.get('job_content'))}",
-            f"Required Experience: {safe(row.get('required_experience'))}",
-            f"Desired Experience: {safe(row.get('desired_experience'))}",
+            f"【職種名】{safe(row.get('title'))}",
+            f"【ポジション】{safe(row.get('position'))}",
+            f"【業界】{safe(row.get('job_industry'))}",
+            f"【勤務地】{safe(row.get('location'))}",
+            f"【職務内容】{safe(row.get('job_content'))}",
+        
+            # 🔑 Make these unmistakable
+            f"【必須要件（満たさない場合、原則書類通過不可）】{safe(row.get('required_experience'))}",
+            f"【歓迎要件（加点要素）】{safe(row.get('desired_experience'))}",
         ]
 
+
         job_context = "\n".join(
-            p for p in job_context_parts if p.split(": ", 1)[1]
+            p for p in job_context_parts if p.strip()
         )
+
 
         jobs.append({
             "title": safe(row.get("title")) or "Unknown Role",
@@ -106,16 +181,20 @@ Return ONLY valid JSON.
 No markdown.
 No text outside JSON.
 
-あなたは、キャリアアドバイザー兼採用担当者です。
-以下の履歴書（CV）を丁寧に読み、
-この求人に対して「なぜそう評価したのか」が
-第三者にも分かるように説明してください。
+あなたは、人材紹介エージェントとして
+書類選考の実務経験が豊富なキャリアアドバイザーです。
 
-【重要な前提】
-- 評価は書類選考段階のものです
+以下の履歴書（CV）を読み、
+「この候補者が、この求人の書類選考を通過できるか」
+を、第三者にも説明できる形で評価してください。
+
+【評価の前提（必ず厳守）】
+- 本評価は「書類選考段階」の判断です
 - CVに明示的に記載されている内容のみを根拠にしてください
-- 推測や断定は禁止です
-- ENTRY求人では経験不足を否定的に扱ってはいけません
+- 推測・補完・好意的解釈は禁止です
+- 求人票に記載された要件・文言を最重要視してください
+- ENTRY求人では、経験不足を否定的に評価してはいけません
+- 評価は「採用可否の最終判断」ではありません
 
 【求人レベル】
 {job["seniority"]}
@@ -123,15 +202,21 @@ No text outside JSON.
 【候補者レベル】
 {candidate_seniority}
 
-【職務内容】
+【評価対象の求人情報】
 {job["job_context"][:1500]}
+
+【評価の観点】
+- 必須要件と経歴の適合性（最重要）
+- 歓迎要件と経歴の適合性（加点要素）
+- 職務内容全体との整合性
+- 上記を踏まえた書類通過の現実的可能性
 
 【出力JSON形式（厳守）】
 {{
   "SUMMARY": "",
-  "MUST_HAVE": "",
-  "PREFERRED": "",
-  "ALIGNMENT": "",
+  "MUST_HAVE_REASONING": "",
+  "PREFERRED_REASONING": "",
+  "ROLE_ALIGNMENT_REASONING": "",
   "score": 0
 }}
 """
@@ -146,10 +231,10 @@ No text outside JSON.
             "temperature": 0.3,
             "max_output_tokens": 900,
         }
+
     )
 
     return extract_json(response.text)
-
 
 # ----------------------------
 # UI
@@ -179,22 +264,54 @@ if uploaded_cvs and jobs_file and st.button("Evaluate CVs"):
 
     st.subheader("📊 Results")
 
+    results = []
+    
     for job in jobs:
-        result = generate_full_assessment(
-            candidate_files,
-            job,
-            MODEL_NAME,
-            candidate_seniority
-        )
-
+        try:
+            result = generate_full_assessment(
+                candidate_files,
+                job,
+                MODEL_NAME,
+                candidate_seniority
+            )
+    
+            results.append({
+                "job": job,
+                "result": result
+            })
+    
+        except Exception as e:
+            st.error(f"❌ Evaluation failed for job: {job['title']}")
+            st.code(repr(e))
+            continue
+    results = sorted(
+        results,
+        key=lambda x: x["result"]["score"],
+        reverse=True
+    )
+    
+    for item in results:
+        job = item["job"]
+        result = item["result"]
+    
         st.markdown(f"### {job['title']}")
         st.write(f"**Score:** {result['score']}%")
+    
         st.write("**Summary**")
         st.write(result["SUMMARY"])
+    
         st.write("**Must Have**")
-        st.write(result["MUST_HAVE"])
+        st.write(result["MUST_HAVE_REASONING"])
+        
         st.write("**Preferred**")
-        st.write(result["PREFERRED"])
+        st.write(result["PREFERRED_REASONING"])
+        
         st.write("**Alignment**")
-        st.write(result["ALIGNMENT"])
+        st.write(result["ROLE_ALIGNMENT_REASONING"])
+    
         st.divider()
+
+
+
+
+
