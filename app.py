@@ -28,55 +28,25 @@ st.write(
 def to_gemini_part(uploaded_file, debug=True):
     if debug:
         st.divider()
-        st.subheader("📄 Attaching CV to Gemini")
+        st.subheader("📄 Attaching PDF CV to Gemini")
 
-    # Basic file info
+    if not uploaded_file.name.lower().endswith(".pdf"):
+        st.error("❌ Only PDF CVs are supported at the moment.")
+        raise ValueError("Non-PDF CV uploaded")
+
+    uploaded_file.seek(0)
+
+    data = uploaded_file.read()
+    if not data:
+        raise ValueError("PDF file is empty")
+
     if debug:
         st.write("Filename:", uploaded_file.name)
-        st.write("Streamlit MIME:", uploaded_file.type)
-
-    # Reset pointer
-    try:
-        uploaded_file.seek(0)
-        if debug:
-            st.success("File pointer reset")
-    except Exception as e:
-        st.error("❌ Failed to reset file pointer")
-        st.code(repr(e))
-        raise
-
-    # Resolve MIME
-    mime_type, encoding = mimetypes.guess_type(uploaded_file.name)
-
-    if uploaded_file.name.lower().endswith(".pdf"):
-        mime_type = "application/pdf"
-        if debug:
-            st.info("PDF detected → forcing application/pdf")
-
-    if not mime_type:
-        mime_type = uploaded_file.type or "application/octet-stream"
-        if debug:
-            st.warning("MIME guess failed → using fallback")
-
-    if debug:
-        st.write("Final MIME:", mime_type)
-
-    # Read bytes
-    data = uploaded_file.read()
-
-    if debug:
         st.write("File size (bytes):", len(data))
-
-    if not data:
-        st.error("❌ CV file is EMPTY (0 bytes). Aborting.")
-        raise ValueError(f"CV '{uploaded_file.name}' is empty")
-
-    if debug:
-        st.success("CV attached successfully")
 
     return {
         "inline_data": {
-            "mime_type": mime_type,
+            "mime_type": "application/pdf",
             "data": data,
         }
     }
@@ -255,8 +225,8 @@ No text outside JSON.
 # UI
 # ----------------------------
 uploaded_cvs = st.file_uploader(
-    "Upload CV files (PDF / DOCX)",
-    type=["pdf", "docx"],
+    "Upload CV files (PDF only for now)",
+    type=["pdf"],
     accept_multiple_files=True
 )
 
