@@ -160,7 +160,7 @@ No text outside JSON.
 書類選考の実務経験が豊富なキャリアアドバイザーです。
 
 以下の履歴書（CV）を読み、
-「この候補者が、この求人の書類選考を通過できるか」
+「この候補者と求人要件の整合性を、書類情報の範囲で評価してください」
 を、第三者にも説明できる形で評価してください。
 
 【評価の前提（必ず厳守）】
@@ -184,7 +184,8 @@ No text outside JSON.
 - 必須要件と経歴の適合性（最重要）
 - 歓迎要件と経歴の適合性（加点要素）
 - 職務内容全体との整合性
-- 上記を踏まえた書類通過の現実的可能性
+- 上記を踏まえた書類情報上の適合度
+
 
 IMPORTANT:
 - The JSON must start with {{ and end with }}
@@ -228,7 +229,30 @@ IMPORTANT:
         st.code(repr(e))
         raise
 
-    return extract_json(response.text)
+    if not response.candidates:
+        raise ValueError("No candidates returned by Gemini")
+    
+    candidate = response.candidates[0]
+    
+    if candidate.finish_reason != 0:
+        raise ValueError(
+            f"Gemini did not generate content. "
+            f"finish_reason={candidate.finish_reason}"
+        )
+    
+    if not candidate.content or not candidate.content.parts:
+        raise ValueError("Gemini returned no content parts")
+    
+    text_parts = [
+        p.text for p in candidate.content.parts if hasattr(p, "text")
+    ]
+    
+    if not text_parts:
+        raise ValueError("No text parts found in Gemini response")
+    
+    full_text = "\n".join(text_parts)
+    
+    return extract_json(full_text)
 
 # ----------------------------
 # UI
