@@ -176,15 +176,7 @@ def get_available_jobs(df: pd.DataFrame):
 # AI Core
 # ----------------------------
 def generate_full_assessment(candidate_files, job, model_name, candidate_seniority):
-    st.divider()
-    st.subheader("🤖 Gemini Evaluation Call")
-
-    st.write("Model name:", model_name)
-    st.write("Candidate seniority:", candidate_seniority)
-    st.write("Job title:", job["title"])
-    st.write("Job seniority:", job["seniority"])
-    st.write("Prompt length:", len(prompt))
-    st.write("Number of attached CV files:", len(candidate_files))
+    
     prompt = f"""
 Return ONLY valid JSON.
 No markdown.
@@ -229,7 +221,15 @@ No text outside JSON.
   "score": 0
 }}
 """
+    st.divider()
+    st.subheader("🤖 Gemini Evaluation Call")
 
+    st.write("Model name:", model_name)
+    st.write("Candidate seniority:", candidate_seniority)
+    st.write("Job title:", job["title"])
+    st.write("Job seniority:", job["seniority"])
+    st.write("Prompt length:", len(prompt))
+    st.write("Number of attached CV files:", len(candidate_files))
     model = genai.GenerativeModel(model_name)
 
     contents = [prompt, *candidate_files]
